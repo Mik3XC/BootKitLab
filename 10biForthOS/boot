@@ -1,0 +1,3 @@
+#! /bin/sh
+
+qemu-system-i386 -drive file=10biForthOS.flp,format=raw,index=0 -serial tcp:localhost:44444,server,nowait

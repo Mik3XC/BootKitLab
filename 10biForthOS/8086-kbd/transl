@@ -1,0 +1,21 @@
+#! /bin/sh
+
+PROG=$1
+DEBUG=$2
+[ -n "$DEBUG" ] || DEBUG="off"
+
+if [ -z "$PROG" ]; then
+	echo "Usage: $0 prog.asm <debug: on|off>"
+	exit 0
+fi
+
+nasm -f bin $PROG -o code.o
+ndisasm -b 16 code.o
+
+TO=$(hexdump code.o | tail -n1)
+
+INPUT=$(cat code.o | gforth transl.fs -e "hex 0 $TO show $DEBUG transl")
+echo $INPUT
+
+./type $INPUT
+

@@ -1,0 +1,8 @@
+#! /bin/sh
+# Connect to the running 10biForthOS serial console (qemu serves on localhost:44444).
+# macOS's built-in nc has no -N flag; prefer ncat (nmap) when present, else plain nc.
+if command -v ncat >/dev/null 2>&1; then
+	exec ncat localhost 44444
+else
+	exec nc localhost 44444
+fi

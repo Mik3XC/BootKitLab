@@ -1,0 +1,28 @@
+#! /bin/sh
+# Upload a program to the serial 8086 10biForthOS.
+# Frames each code byte as 0x01 <byte> ("compile one byte") and appends 0x00 ("execute"),
+# raw over the serial link. No gforth/transl.fs needed, so bytes >0x7F are never mangled.
+# Only one serial client at a time: close any ./to-serial before sending.
+
+if [ -z "$1" ]; then
+	echo "Usage: $0 <prog.asm>"
+	exit 0
+fi
+if [ ! -f "$1" ]; then
+	echo "send: no such file: $1" >&2
+	exit 1
+fi
+
+nasm -f bin "$1" -o code.o || exit 1
+echo "=== $1: $(wc -c < code.o | tr -d ' ') bytes ==="
+ndisasm -b 16 code.o | sed -n '1,3p'
+echo "... ..."
+ndisasm -b 16 code.o | tail -n 1
+
+frame() { perl -ne 'BEGIN{$/=\1} print "\x01", $_' code.o; printf '\x00'; }
+
+if command -v ncat >/dev/null 2>&1; then
+	frame | ncat --send-only localhost 44444      # closes cleanly after the stream
+else
+	frame | nc -w 2 localhost 44444               # stock macOS nc: exits ~2s after EOF
+fi

@@ -1,0 +1,22 @@
+#! /bin/sh
+
+if [ -z "$1" ]; then
+	echo "Usage: $0 <prog.asm>"
+	exit 0
+fi
+
+if [ ! -f "$1" ]; then
+	gforth -e "$1 emit bye" | ./to-serial
+	exit 0
+fi
+
+nasm -f bin $1 -o code.o
+CODE=$(ndisasm -b 16 code.o)
+
+echo "$CODE" | head -n 3
+echo "... ..."
+echo "$CODE" | tail -n 3
+
+TO=$(hexdump code.o | tail -n1)
+
+cat code.o | gforth transl.fs -e "hex 0 $TO transl" | ./to-serial

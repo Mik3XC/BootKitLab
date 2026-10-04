@@ -1,0 +1,16 @@
+#! /bin/sh
+
+DELAY=1
+ORIG=$(xdotool getactivewindow)
+LAYOUT=$(setxkbmap -query | awk '/layout/ {print $2}')
+
+setxkbmap en_US
+
+xdotool search --class qemu windowactivate
+sleep 0.1
+
+xdotool type --delay $DELAY "$1"
+
+setxkbmap $LAYOUT
+
+xdotool windowactivate $ORIG

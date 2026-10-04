@@ -1,0 +1,18 @@
+#! /bin/sh
+
+PROG=$1
+
+if [ -z "$PROG" ]; then
+	echo "Usage: $0 prog.asm"
+	exit 0
+fi
+
+nasm $PROG -o code.o
+ndisasm -b 64 code.o
+echo
+
+TO=$(hexdump code.o | tail -n1)
+
+cat code.o | gforth transl.fs -e "hex $TO transl"
+
+

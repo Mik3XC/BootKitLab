@@ -1,0 +1,3 @@
+<https://research.h4x.cz/html/2019/2019-10-22--linux--minimal_viable_x86_elf64_static_binary.html>
+<https://ech0.re/building-the-smallest-elf-program/>
+<https://nathanotterness.com/2021/10/tiny_elf_modernized.html>
