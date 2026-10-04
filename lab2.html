@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 2 — Detecting Hooks</title>
+<meta name="description" content="Call-table hooks as a detection problem: baseline each entry, resolve its target, flag anything that no longer points into known signed code.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:64ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.78rem;color:var(--amber);min-width:62px}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  /* scan demo */
+  .scan{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.78rem;min-width:560px}
+  .scan th,.scan td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .scan th{font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  .scan td.addr{color:var(--fg)} .scan td.mod{color:var(--muted)}
+  .cellwrap{overflow-x:auto}
+  .pill{display:inline-block;font-size:.68rem;font-weight:600;border-radius:99px;padding:2px 9px;white-space:nowrap}
+  .pill.good{background:#123528;color:var(--good)} .pill.info{background:#102a3d;color:var(--info)}
+  .pill.warn{background:#3a2f12;color:var(--warn)} .pill.crit{background:#3a1616;color:var(--crit)}
+  .pill.pend{background:#1a2530;color:var(--faint)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:.3rem 0 1rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  pre{font-family:var(--mono);font-size:.78rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.55}
+  pre .c{color:var(--faint)} pre .g{color:var(--good)} pre .r{color:var(--crit)} pre .k{color:var(--cyan)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.25rem 0}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:8px}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* labs dropdown */
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  /* nav: fade state changes; the live CTA lights on hover and fades away on leave/click-away; no sticky touch-hover */
+  nav a,.labs-btn{transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a.cta{color:var(--cyan)}
+  @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
+  @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+  .labs-panel[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+  
+      <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html" class="cur">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+    </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 2 · detection engineering</div>
+    <h1>Detecting <span class="cy">call-table hooks</span>.</h1>
+    <p class="sub">A rootkit hides by redirecting a table the OS trusts — an import table, an interrupt vector, the syscall dispatcher. This lab doesn't build that. It teaches the <b>invariant a defender checks</b>: every entry in those tables should point into known, signed code — and a hook is a pointer that no longer does.</p>
+    <div class="banner"><b>Detection only.</b> We treat a hook as an <em>observable artifact</em> — a handler address that resolves somewhere it shouldn't — and ask how to baseline it, flag it, and record it. No hooking technique is implemented here.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the invariant</div>
+  <h2>What the tables are, and what a hook changes</h2>
+  <p class="lede">Each of these is a table of pointers the OS follows to reach code. Legitimately, every pointer lands in a specific, known place. A hook swaps one pointer for its own — so the <em>shape</em> of the table is what gives it away.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">IAT</span><span class="d">Import Address Table — per-process, resolves a DLL's exported functions. Entries should point into the mapped module they import from.</span></div>
+    <div class="r"><span class="lab">IDT</span><span class="d">Interrupt Descriptor Table — vectors to interrupt/exception handlers. Each gate should point into kernel text, with the expected segment and privilege.</span></div>
+    <div class="r"><span class="lab">SSDT</span><span class="d">System Service Dispatch Table — the syscall handlers. Entries should resolve inside <code>ntoskrnl</code>'s code range.</span></div>
+    <div class="r"><span class="lab">GDT</span><span class="d">Global Descriptor Table — segment descriptors. An unexpected call gate or extra ring-0 code segment is the anomaly.</span></div>
+  </div>
+  <p class="lede" style="margin-top:1rem">The defender's move is the same for all four: <b>know where each pointer should land, then check that it still does.</b></p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">02 — the method</div>
+  <h2>Baseline → resolve → classify</h2>
+  <div class="grid g2">
+    <div class="card">
+      <ul class="tight">
+        <li><b style="color:var(--fg)">Baseline</b> each table from a known-good system (same OS build), storing the resolved location of every entry — not the raw address, which moves with KASLR.</li>
+        <li><b style="color:var(--fg)">Resolve</b> each current handler to the module that owns that address (which driver / which section).</li>
+        <li><b style="color:var(--fg)">Classify</b>: in the expected kernel image = normal; in another module = investigate; outside every known module = critical; wrong code segment or privilege = critical.</li>
+        <li><b style="color:var(--fg)">Record</b> the finding with its evidence so a human can confirm — not auto-convict.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">What a clean vs hooked entry looks like</h3>
+      <pre><span class="c"># resolved, not raw — KASLR moves addresses</span>
+NtCreateFile   → <span class="g">ntoskrnl.exe + .text</span>   ok
+IDT[0x2e]      → <span class="g">ntoskrnl.exe + .text</span>   ok
+NtEnumerateKey → <span class="r">0x????  (no owning module)</span>  critical
+IDT[0x1f]      → <span class="r">unknown.sys (not core)</span>   investigate</pre>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">03 — run an integrity scan</div>
+  <h2>Classify the table</h2>
+  <p class="lede">An illustrative table of handlers (sample data — on a real host this comes from <code>idtscan</code>). Run the scan: each entry is resolved to its owning module and classified. Watch which ones a defender would chase.</p>
+  <div class="controls">
+    <button class="btn" id="scanBtn" onclick="runScan()">▶ run integrity scan</button>
+    <button class="btn ghost" onclick="resetScan()">reset</button>
+    <span class="mono" id="verdict" style="font-size:.78rem;color:var(--faint)"></span>
+  </div>
+  <div class="cellwrap"><table class="scan" id="scan"></table></div>
+  <div class="legend">
+    <span><span class="pill good">in kernel</span> expected</span>
+    <span><span class="pill info">known security product</span> benign hook</span>
+    <span><span class="pill warn">other module</span> investigate</span>
+    <span><span class="pill crit">outside all modules</span> critical</span>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — with your tools</div>
+  <h2>Where this runs for real</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">idtscan</h3>
+      <p class="lede" style="font-size:.86rem">Your read-only IDT/GDT scanner already does the IDT/GDT half: it reads the real table, resolves each gate, and flags a handler outside kernel text, inside a module, a wrong code segment, or a ring-3 gate that shouldn't exist.</p>
+      <pre><span class="k">sudo</span> python3 idtscan/linux/idtscan_linux.py --out scan.jsonl
+python3 idtscan/probe_1f.py scan.jsonl --baseline known-good.jsonl
+<span class="c"># exit 3 = high/critical · 1 = gap · 0 = clean</span></pre>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">honest limits</h3>
+      <ul class="tight">
+        <li>Addresses move with <b>KASLR</b> — compare resolved locations, not raw pointers.</li>
+        <li>A rootkit that re-points <code>IDTR</code> at a <em>shadow</em> table isn't caught by reading the real one — a known gap, recorded as such.</li>
+        <li><code>lockdown=confidentiality</code> blocks <code>/proc/kcore</code> — that's a <em>scan gap</em>, never a "clean" pass.</li>
+        <li>On x64 Windows, <b>PatchGuard/KPP</b> makes kernel SSDT hooking rare — a hit there is high-signal but needs context.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1rem">A confirmed finding becomes a <b>Vertical</b> case: preserve the scan line, resolve the module, record the verdict with its basis. Same discipline as Lab 1 — detect, record, don't auto-convict.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — false positives are the hard part</div>
+  <h2>Not every hook is hostile</h2>
+  <p class="lede">EDR and anti-virus legitimately hook — that's the noise you tune against. The skill isn't spotting a hook; it's telling a <em>security product's</em> hook from an <em>unknown module's</em>, and an unknown module's from a handler that belongs to <em>no module at all</em>. The last one is the one that matters, and it's the one a defender can state with confidence.</p>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 3 — cross-view detection (catching what a rootkit hides by comparing a high-level list against a low-level one), built on the detection lab.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 2 · detecting call-table hooks · baseline, resolve, classify, record — never hook</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  // illustrative sample — on a real host these rows come from idtscan / an SSDT reader
+  var ROWS=[
+    {name:"NtCreateFile",            addr:"ntoskrnl+0x1a2f40", mod:"ntoskrnl.exe", v:"good", note:"in kernel text"},
+    {name:"NtOpenProcess",           addr:"ntoskrnl+0x1b0e10", mod:"ntoskrnl.exe", v:"good", note:"in kernel text"},
+    {name:"NtQuerySystemInformation",addr:"wdfilter+0x3a10",   mod:"WdFilter.sys", v:"info", note:"Defender — known security product"},
+    {name:"NtQueryDirectoryFile",    addr:"unknown+0x0920",    mod:"prnhlp.sys",   v:"warn", note:"unrecognized module — investigate"},
+    {name:"NtEnumerateValueKey",     addr:"0x8e4f21a0",        mod:"(none)",       v:"crit", note:"resolves to no loaded module"},
+    {name:"NtDeviceIoControlFile",   addr:"ntoskrnl+0x19d2c0", mod:"ntoskrnl.exe", v:"good", note:"in kernel text"}
+  ];
+  var LABEL={good:"in kernel",info:"known security product",warn:"other module",crit:"outside all modules"};
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  function paint(upto){
+    var t=document.getElementById("scan");
+    var h='<thead><tr><th>syscall / vector</th><th>resolved handler</th><th>module</th><th>verdict</th></tr></thead><tbody>';
+    ROWS.forEach(function(r,i){
+      var shown = upto<0 ? false : i<=upto;
+      var pill = shown ? '<span class="pill '+r.v+'">'+LABEL[r.v]+'</span>' : '<span class="pill pend">— pending —</span>';
+      h+='<tr><td>'+r.name+'</td><td class="addr">'+r.addr+'</td><td class="mod">'+r.mod+'</td><td>'+pill+'</td></tr>';
+    });
+    t.innerHTML=h+'</tbody>';
+  }
+  function resetScan(){ paint(-1); document.getElementById("verdict").textContent=""; }
+  window.resetScan=resetScan;
+  window.runScan=function(){
+    var i=0;
+    function step(){
+      paint(i); i++;
+      if(i<ROWS.length){ if(reduce) step(); else setTimeout(step,260); }
+      else {
+        var crit=ROWS.filter(function(r){return r.v==="crit";}).length;
+        var warn=ROWS.filter(function(r){return r.v==="warn";}).length;
+        document.getElementById("verdict").textContent="scan complete — "+crit+" critical, "+warn+" to investigate, "+(ROWS.length-crit-warn)+" accounted for";
+      }
+    }
+    step();
+  };
+  resetScan();
+})();
+</script>
+
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

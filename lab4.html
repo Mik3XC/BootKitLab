@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 4 — C2 Detection</title>
+<meta name="description" content="Catch command-and-control without a signature: beaconing regularity and DNS tunneling, scored statistically from telemetry you already collect.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:64ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.76rem;color:var(--amber);min-width:128px}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  /* mode toggle */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:.2rem 0 1rem}
+  .seg button{font-family:var(--mono);font-size:.8rem;background:transparent;color:var(--muted);border:0;padding:8px 15px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--cyan);color:#04100f;font-weight:600}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  /* host rows */
+  .hosts{display:grid;gap:10px}
+  .host{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;min-width:0}
+  .host .hh{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .host .dst{font-family:var(--mono);font-size:.84rem;color:var(--fg)}
+  .host .meta{font-family:var(--mono);font-size:.74rem;color:var(--faint)}
+  .host .verdict{font-family:var(--mono);font-size:.74rem;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--faint)}
+  .host.flag{border-color:var(--crit)} .host.flag .verdict{color:var(--crit);border-color:var(--crit);background:#2a1414}
+  .host.clear{border-color:var(--cyan-dim)} .host.clear .verdict{color:var(--good);border-color:var(--cyan-dim)}
+  /* timeline of beacons */
+  .tl{position:relative;height:34px;margin:10px 0 4px;border-left:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .tl .tick{position:absolute;bottom:0;width:2px;height:22px;background:var(--muted);border-radius:1px}
+  .host.flag .tl .tick{background:var(--crit)}
+  .host.clear .tl .tick{background:var(--cyan)}
+  .metrics{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-top:8px}
+  .metrics b{color:var(--amber);font-weight:500}
+  .why{font-family:var(--mono);font-size:.76rem;color:var(--muted);margin-top:7px;line-height:1.55}
+  .why .crit{color:var(--crit)} .why .good{color:var(--good)}
+  .bars{display:flex;gap:2px;align-items:flex-end;height:26px;margin-top:6px}
+  .bars span{flex:1;background:var(--line);border-radius:1px 1px 0 0;min-height:2px}
+  .host.flag .bars span{background:var(--amber-dim)}
+  pre{font-family:var(--mono);font-size:.78rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.55}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.25rem 0}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  /* nav: fade state changes; the live CTA lights on hover and fades away on leave/click-away; no sticky touch-hover */
+  nav a,.labs-btn{transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a.cta{color:var(--cyan)}
+  @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
+  @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+  .labs-panel[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html" class="cur">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 4 · detection engineering</div>
+    <h1>Catching the <span class="cy">call-home</span>.</h1>
+    <p class="sub">Implanted code has to reach its operator — to pull tasking and push results. That channel is <b>command-and-control</b>, and it leaves a shape in the traffic even when every packet is encrypted. You don't need a signature; you need the two things malware can't fully hide: it calls back on a <b>rhythm</b>, and when it hides data in DNS, the <b>names go strange</b>.</p>
+    <div class="banner"><b>Detection only.</b> This lab scores telemetry you already collect. It builds no implant and no channel — the beacon and the tunnel stay sample data, and everything here is measurement.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the idea</div>
+  <h2>Two tells, both statistical</h2>
+  <p class="lede">A good C2 channel blends into normal traffic: HTTPS to a plausible host, or DNS that every network allows out. Content inspection loses here — it's encrypted, or it's a legal DNS query. So defenders stop reading packets and start measuring <em>behaviour</em> across many of them.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">beaconing</span><span class="d">The implant checks in on a schedule. Humans browse in bursts and gaps; a beacon's <b>inter-arrival times</b> cluster tight around one value. Low variance over many connections to one destination is the tell — even through jitter.</span></div>
+    <div class="r"><span class="lab">DNS tunneling</span><span class="d">Data is smuggled in the <em>names</em> being looked up. The subdomains get long and high-entropy, the unique-name count explodes under one parent domain, and failed lookups (NXDOMAIN) spike. Normal DNS looks nothing like it.</span></div>
+    <div class="r"><span class="lab">why it survives</span><span class="d">Both are properties of the <b>aggregate</b>, not of any one packet. Encryption doesn't hide a rhythm, and a tunnel can't avoid being made of queries. You measure the distribution, not the payload.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — score the traffic</div>
+  <h2>Find the channel</h2>
+  <p class="lede">Sample telemetry from one host, several destinations. Pick a detector and run it: benign talkers should come back clear, the C2 channel should stand out on the metric — not on anything you could read in a single packet.</p>
+  <div class="seg" role="group" aria-label="detector">
+    <button id="mBeacon" aria-pressed="true" onclick="setMode('beacon')">beaconing (R3)</button>
+    <button id="mDns" aria-pressed="false" onclick="setMode('dns')">DNS tunneling (R4)</button>
+  </div>
+  <div class="controls">
+    <button class="btn" id="runBtn" onclick="runScan()">▶ run detector</button>
+    <button class="btn ghost" onclick="resetScan()">reset</button>
+  </div>
+  <p class="lede mono" id="modeNote" style="font-size:.78rem"></p>
+  <div class="hosts" id="hosts"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — with your tools</div>
+  <h2>C2 detection on your stack</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">what feeds it</h3>
+      <p class="lede" style="font-size:.86rem">Neither detector needs packet contents — only connection records and DNS logs, which Zeek produces by default and osquery can supplement with process ownership.</p>
+      <pre><span class="c"># beaconing — group a destination's connections, measure rhythm</span>
+zeek: conn.log      <span class="c"># ts, id.resp_h, duration</span>
+<span class="k">group by</span> resp_h → inter-arrival deltas → <span class="k">cv = stdev/mean</span>
+
+<span class="c"># dns tunneling — profile each parent domain</span>
+zeek: dns.log       <span class="c"># query, rcode</span>
+<span class="k">group by</span> parent → label-len, uniq-subs, nxdomain%</pre>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">in the detection lab</h3>
+      <ul class="tight">
+        <li><b>R3</b> already flags beaconing: it buckets a <code>proc_key</code>'s connections to one destination and scores the regularity of the gaps.</li>
+        <li><b>R4</b> already flags DNS tunneling: entropy and unique-subdomain volume per parent domain, with the NXDOMAIN rate.</li>
+        <li>Thresholds live in <code>rules/params.json</code> — tune CV and entropy cutoffs to your own baseline instead of a vendor default.</li>
+        <li>A confirmed channel becomes a <b>Vertical</b> case: the destination, the metric, and the window of records as evidence.</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>Everything legitimate beacons too</h2>
+  <p class="lede">This is where C2 detection earns its keep. NTP, software update checks, telemetry, certificate OCSP, a mail client polling — all call home on a rhythm, and plenty of CDNs answer long random-looking names. A naive regularity rule drowns you in them.</p>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Baseline, then subtract.</b> The signal isn't "regular" — it's <em>regular and unexpected</em>. Known-good destinations and update endpoints belong on an allowlist before the rule ever fires.</li>
+    <li><b style="color:var(--fg)">Jitter is a knob, not a disguise.</b> Operators randomize check-in times, but bounded jitter still has a tighter distribution than human browsing. Widen the window and the rhythm reappears.</li>
+    <li><b style="color:var(--fg)">Combine weak signals.</b> One metric is noisy; a destination that beacons <em>and</em> is first-seen (Lab's R5) <em>and</em> is unattributed to a known process (Lab 3) is a conviction. Correlation is the point.</li>
+  </ul>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 5 — memory forensics: finding what a disk scan can't, in the one place the implant must become real.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 4 · C2 detection · measure the rhythm and the names — never build the channel</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var mode="beacon";
+
+  // ---- sample data -------------------------------------------------------
+  // beaconing: inter-arrival gaps (seconds) between connections to a destination
+  var BEACON=[
+    {dst:"13.107.42.14  (graph.microsoft.com)", gaps:[300,298,301,299,300,302,299,301,300,298], note:"telemetry — regular but known-good"},
+    {dst:"185.220.101.47", gaps:[60,61,59,60,60,62,58,61,60,59], note:"check-in every ~60s, tiny jitter"},
+    {dst:"151.101.0.223  (cdn)", gaps:[4,52,311,9,1203,27,88,640,15,402], note:"human browsing — bursty"}
+  ];
+  // dns: per parent domain — sample subdomain labels + rcodes
+  var DNS=[
+    {parent:"windowsupdate.com", subs:["ctldl","au","download","fe3cr","emdl"], nx:0, note:"normal service names"},
+    {parent:"a3f9c2e1b7.badtun.net", subs:["x7f3k9a2zq1p","m4w8r2t6y0e5","b1n5h7j3k9d2","q8z4x2c6v0b7","l3p9s5d1f7g4","t6y2u8i4o0a9","r5e3w7q1z9x2","c4v8b2n6m0k3"], nx:6, note:"base32-ish, one per packet, many fail"},
+    {parent:"google.com", subs:["www","mail","accounts","apis","fonts"], nx:0, note:"normal service names"}
+  ];
+
+  function mean(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
+  function stdev(a){var m=mean(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/a.length);}
+  function shannon(str){
+    var f={},n=str.length,i;for(i=0;i<n;i++){var c=str[i];f[c]=(f[c]||0)+1;}
+    var h=0;for(var k in f){var p=f[k]/n;h-=p*Math.log2(p);}return h;
+  }
+
+  var ALLOW=["graph.microsoft.com","windowsupdate.com","google.com"];
+  function allowed(s){ for(var i=0;i<ALLOW.length;i++) if(s.indexOf(ALLOW[i])>=0) return true; return false; }
+
+  function setMode(m){
+    mode=m;
+    document.getElementById("mBeacon").setAttribute("aria-pressed", m==="beacon");
+    document.getElementById("mDns").setAttribute("aria-pressed", m==="dns");
+    resetScan();
+  }
+  window.setMode=setMode;
+
+  function note(){
+    document.getElementById("modeNote").textContent = mode==="beacon"
+      ? "metric: coefficient of variation CV = stdev / mean of the inter-arrival gaps. CV < 0.10 = metronome-regular. Allowlisted known-good destinations are excused."
+      : "metric: mean subdomain-label length, unique-subdomain count, Shannon entropy, and NXDOMAIN rate, per parent domain. Allowlisted domains are excused.";
+  }
+
+  function resetScan(){
+    note();
+    var host=document.getElementById("hosts");
+    if(mode==="beacon"){
+      host.innerHTML=BEACON.map(function(b){
+        var ticks=beaconTicks(b.gaps);
+        return '<div class="host"><div class="hh"><span class="dst">'+esc(b.dst)+'</span>'+
+               '<span class="verdict">not scored</span></div>'+
+               '<div class="tl">'+ticks+'</div>'+
+               '<div class="metrics"><span>'+b.gaps.length+' connections</span><span>gaps: '+b.gaps.join(', ')+'s</span></div></div>';
+      }).join("");
+    }else{
+      host.innerHTML=DNS.map(function(d){
+        var bars=d.subs.map(function(s){return '<span style="height:'+Math.min(100,s.length*7)+'%"></span>';}).join("");
+        return '<div class="host"><div class="hh"><span class="dst">*.'+esc(d.parent)+'</span>'+
+               '<span class="verdict">not scored</span></div>'+
+               '<div class="bars">'+bars+'</div>'+
+               '<div class="metrics"><span>'+d.subs.length+' unique subdomains</span><span>'+d.nx+' NXDOMAIN</span></div></div>';
+      }).join("");
+    }
+  }
+  window.resetScan=resetScan;
+
+  function beaconTicks(gaps){
+    var t=0,times=[0],i;for(i=0;i<gaps.length;i++){t+=gaps[i];times.push(t);}
+    var max=times[times.length-1]||1;
+    return times.map(function(x){return '<span class="tick" style="left:'+(x/max*98)+'%"></span>';}).join("");
+  }
+  function esc(s){return s.replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+
+  window.runScan=function(){
+    var host=document.getElementById("hosts");
+    if(mode==="beacon"){
+      host.innerHTML=BEACON.map(function(b){
+        var m=mean(b.gaps), sd=stdev(b.gaps), cv=sd/m;
+        var excused=allowed(b.dst);
+        var beacon = cv<0.10 && !excused;
+        var cls = beacon?"host flag":"host clear";
+        var vtxt = beacon?"BEACON":(excused?"allowlisted":"benign");
+        var why;
+        if(beacon) why='<span class="crit">CV '+cv.toFixed(3)+'</span> — gaps barely move across '+b.gaps.length+' connections. Metronome-regular to an unknown host = check-in rhythm.';
+        else if(excused) why='CV '+cv.toFixed(3)+' is tight, but the destination is known-good (update/telemetry) — <span class="good">excused by allowlist</span>, not a conviction.';
+        else why='<span class="good">CV '+cv.toFixed(3)+'</span> — gaps vary widely. Bursts and long idles = a human at a browser, not a schedule.';
+        return '<div class="'+cls+'"><div class="hh"><span class="dst">'+esc(b.dst)+'</span>'+
+               '<span class="verdict">'+vtxt+'</span></div>'+
+               '<div class="tl">'+beaconTicks(b.gaps)+'</div>'+
+               '<div class="metrics"><span>mean <b>'+m.toFixed(0)+'s</b></span><span>stdev <b>'+sd.toFixed(1)+'</b></span><span>CV <b>'+cv.toFixed(3)+'</b></span></div>'+
+               '<div class="why">'+why+'</div></div>';
+      }).join("");
+    }else{
+      host.innerHTML=DNS.map(function(d){
+        var avg=mean(d.subs.map(function(s){return s.length;}));
+        var ent=mean(d.subs.map(function(s){return shannon(s);}));
+        var nxrate=d.nx/d.subs.length;
+        var excused=allowed(d.parent);
+        var tunnel = (avg>=10 && ent>=3.2 && d.subs.length>=6) && !excused;
+        var cls=tunnel?"host flag":"host clear";
+        var vtxt=tunnel?"TUNNEL":(excused?"allowlisted":"benign");
+        var bars=d.subs.map(function(s){return '<span style="height:'+Math.min(100,s.length*7)+'%"></span>';}).join("");
+        var why;
+        if(tunnel) why='<span class="crit">avg label '+avg.toFixed(1)+' chars · entropy '+ent.toFixed(2)+' bits · '+Math.round(nxrate*100)+'% NXDOMAIN</span> — long, near-random, one-shot names under a single parent. That is payload, not lookups.';
+        else if(excused) why='Short, dictionary service names — and allowlisted anyway. <span class="good">benign</span>.';
+        else why='<span class="good">avg label '+avg.toFixed(1)+' chars · entropy '+ent.toFixed(2)+' bits</span> — short, reused, pronounceable names. Ordinary DNS.';
+        return '<div class="'+cls+'"><div class="hh"><span class="dst">*.'+esc(d.parent)+'</span>'+
+               '<span class="verdict">'+vtxt+'</span></div>'+
+               '<div class="bars">'+bars+'</div>'+
+               '<div class="metrics"><span>uniq <b>'+d.subs.length+'</b></span><span>avg len <b>'+avg.toFixed(1)+'</b></span><span>entropy <b>'+ent.toFixed(2)+'</b></span><span>nx <b>'+d.nx+'</b></span></div>'+
+               '<div class="why">'+why+'</div></div>';
+      }).join("");
+    }
+  };
+
+  setMode("beacon");
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

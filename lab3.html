@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 3 — Cross-View Detection</title>
+<meta name="description" content="Catch a hidden process by enumerating it two ways and diffing: what the low-level view sees but the high-level list doesn't is hidden.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:64ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.76rem;color:var(--amber);min-width:120px}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  /* cross-view demo */
+  .views{display:grid;gap:12px}
+  @media(min-width:620px){.views{grid-template-columns:1fr 1fr}}
+  .view{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;min-width:0}
+  .view h4{margin:0 0 8px;font-family:var(--mono);font-size:.76rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .proc{font-family:var(--mono);font-size:.8rem;display:flex;justify-content:space-between;gap:8px;padding:5px 8px;border-radius:6px;border:1px solid transparent}
+  .proc .pid{color:var(--faint);min-width:52px}
+  .proc.hid{background:#3a1616;border-color:var(--crit);color:var(--crit)}
+  .proc.race{background:#1a2530;border-color:var(--line);color:var(--faint)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .result{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;margin-top:12px;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .result .crit{color:var(--crit)} .result .info{color:var(--info)} .result .good{color:var(--good)}
+  pre{font-family:var(--mono);font-size:.78rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.55}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.25rem 0}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  /* nav: fade state changes; the live CTA lights on hover and fades away on leave/click-away; no sticky touch-hover */
+  nav a,.labs-btn{transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a.cta{color:var(--cyan)}
+  @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
+  @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+  .labs-panel[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html" class="cur">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 3 · detection engineering</div>
+    <h1>Cross-view <span class="cy">detection</span>.</h1>
+    <p class="sub">A rootkit hides a process by unlinking it from the list the OS walks — but the thing still has to <b>run</b>, so a lower-level view of the system still accounts for it. Enumerate the same thing two ways, diff the results: what the low view sees but the high view doesn't is <b>hidden</b>.</p>
+    <div class="banner"><b>Detection only.</b> This lab builds the comparison, not the concealment. The hiding technique stays a named concept; everything here is enumeration and diffing.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the idea</div>
+  <h2>Two views, one truth</h2>
+  <p class="lede">Any list the OS exposes can be tampered with at the layer that produces it. So a defender never trusts one list — they build a second, independent view and compare. A hidden object is a <em>disagreement</em> between the views, and disagreement is something you can state with evidence.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">high-level view</span><span class="d">The convenient API every tool uses — a process snapshot, <code>tasklist</code>, <code>ps</code>. Easiest to query, and the easiest for a rootkit to filter.</span></div>
+    <div class="r"><span class="lab">low-level view</span><span class="d">Something harder to fake that still implies the object exists: the scheduler's thread list, brute-forcing PIDs via open-by-id, scanning kernel memory for the object's signature.</span></div>
+    <div class="r"><span class="lab">the diff</span><span class="d">Present low but absent high → <b>hidden</b> (the finding). Present high but absent low → usually a scan race (the process exited between passes).</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — run a cross-view diff</div>
+  <h2>Find the hidden process</h2>
+  <p class="lede">Two independent enumerations of the same host (sample data). Run the diff: processes in <em>both</em> are accounted for; a PID in the low view with no high-view entry is flagged hidden; a high-only PID is treated as a timing race, not a conviction.</p>
+  <div class="controls">
+    <button class="btn" id="diffBtn" onclick="runDiff()">▶ run cross-view diff</button>
+    <button class="btn ghost" onclick="resetDiff()">reset</button>
+  </div>
+  <div class="views">
+    <div class="view"><h4>high-level · process snapshot</h4><div id="vHigh"></div></div>
+    <div class="view"><h4>low-level · thread/PID scan</h4><div id="vLow"></div></div>
+  </div>
+  <div class="result" id="result">Run the diff to compare the two views.</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — with your tools</div>
+  <h2>Cross-view on your stack</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">macOS / Linux analog</h3>
+      <p class="lede" style="font-size:.86rem">You rarely read kernel memory on a Mac. The same idea becomes <b>cross-source correlation</b>: the process list vs. who actually owns a live socket vs. who Zeek saw send traffic. A process that holds a connection or sends packets but isn't in the baseline process view is the same disagreement.</p>
+      <pre><span class="c"># three independent views</span>
+osquery: processes
+osquery: process_open_sockets   <span class="c"># owner of each socket</span>
+zeek:    conn.log               <span class="c"># traffic, no process</span>
+<span class="k">diff</span> → a talker with no owning process = investigate</pre>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">in the detection lab</h3>
+      <ul class="tight">
+        <li>The normalizer already joins sockets to processes on <code>proc_key</code> — an <em>unattributed</em> connection is a cross-view gap worth a look.</li>
+        <li>A network talker with no matching process row is the macOS-shaped version of "low view sees it, high view doesn't."</li>
+        <li>A confirmed delta becomes a <b>Vertical</b> case: record both views and the diff as the evidence.</li>
+      </ul>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the race is the hard part</div>
+  <h2>Disagreement isn't always hiding</h2>
+  <p class="lede">Processes start and exit between your two passes, so a single diff is noisy — a high-only PID is almost always one that just exited, not evidence of anything. The signal is a <b>persistent</b> low-only object across several passes, ideally from views a single tamper can't fake at once. One snapshot raises a question; repetition answers it.</p>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 4 — detecting C2 (beaconing regularity and DNS tunneling), built on the detection lab's R3/R4.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 3 · cross-view detection · two independent views, diff, repeat — never hide</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // sample host, two independent enumerations
+  var HIGH=[{pid:4,name:"System"},{pid:88,name:"smss"},{pid:420,name:"services"},{pid:1012,name:"explorer"},{pid:2208,name:"updater (exiting)"}];
+  var LOW =[{pid:4,name:"System"},{pid:88,name:"smss"},{pid:420,name:"services"},{pid:1012,name:"explorer"},{pid:6606,name:"??? (no snapshot entry)"}];
+  function render(diff){
+    var hs=new Set(HIGH.map(function(p){return p.pid;}));
+    var ls=new Set(LOW.map(function(p){return p.pid;}));
+    function row(p, side){
+      var cls="proc";
+      if(diff){
+        if(side==="low" && !hs.has(p.pid)) cls="proc hid";
+        if(side==="high" && !ls.has(p.pid)) cls="proc race";
+      }
+      return '<div class="'+cls+'"><span class="pid">'+p.pid+'</span><span>'+p.name+'</span></div>';
+    }
+    document.getElementById("vHigh").innerHTML=HIGH.map(function(p){return row(p,"high");}).join("");
+    document.getElementById("vLow").innerHTML=LOW.map(function(p){return row(p,"low");}).join("");
+  }
+  function resetDiff(){ render(false); document.getElementById("result").textContent="Run the diff to compare the two views."; }
+  window.resetDiff=resetDiff;
+  window.runDiff=function(){
+    render(true);
+    var hs=new Set(HIGH.map(function(p){return p.pid;}));
+    var ls=new Set(LOW.map(function(p){return p.pid;}));
+    var hidden=LOW.filter(function(p){return !hs.has(p.pid);});
+    var race=HIGH.filter(function(p){return !ls.has(p.pid);});
+    var html="";
+    hidden.forEach(function(p){ html+='<div><span class="crit">HIDDEN</span> pid '+p.pid+' — in the low-level view, absent from the process snapshot. Persistent across passes = investigate as a hidden process.</div>'; });
+    race.forEach(function(p){ html+='<div><span class="info">race</span> pid '+p.pid+' — in the snapshot, gone from the low view. Almost certainly exited between passes; not a finding on its own.</div>'; });
+    html+='<div style="margin-top:6px"><span class="good">'+(HIGH.length-race.length)+' accounted for</span> · '+hidden.length+' hidden · '+race.length+' race</div>';
+    document.getElementById("result").innerHTML=html;
+  };
+  resetDiff();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+scenarios:
+  - id: win10-bios-mbr
+    platform: Win10 BIOS/MBR
+    preconditions: [snapshot-before, rollback-after, evidence-capture, bks-lab-mode]
+    safe_action: "Collect deterministic stage markers and integrity baselines only."
+    expected_detection: [boot-entry-drift-alert, boot-file-integrity-drift-alert, early-boot-anomaly-alert]
+    expected_hardening: [secure-boot-not-applicable-legacy, restricted-boot-config-change-control, integrity-baseline-policy]
+    evidence_required: [vm_disk_image, marker, event_logs]
+    pass_fail_criteria: [all-required-evidence-collected, guardrails-passed, rollback-confirmed]
+    vm_profile: win10-bios
+    vm_disk_image: lab/vms/win10-bios/disk.img
+    stage_simulators: [sim.mbr.marker, sim.vbr.marker]
+    drift_action: "simulate_boot_entry_drift"
+    rollback_policy: "restore_snapshot"
+    timeouts: {boot_seconds: 120, evidence_seconds: 60}
+
+  - id: win11-uefi-sb-off
+    platform: Win11 UEFI Secure Boot OFF
+    preconditions: [snapshot-before, rollback-after, evidence-capture, bks-lab-mode]
+    safe_action: "Simulate controlled drift and verify defensive detections in non-production VM."
+    expected_detection: [boot-entry-drift-alert, bcd-integrity-drift-alert, esp-file-drift-alert]
+    expected_hardening: [secure-boot-enable-recommendation, restricted-boot-config-change-control, integrity-baseline-policy]
+    evidence_required: [vm_disk_image, marker, event_logs]
+    pass_fail_criteria: [all-required-evidence-collected, drift-detected, rollback-confirmed]
+    vm_profile: win11-uefi-sb-off
+    vm_disk_image: lab/vms/win11-uefi-sb-off/disk.qcow2
+    stage_simulators: [sim.uefi.marker]
+    drift_action: "simulate_esp_boot_entry_drift"
+    rollback_policy: "restore_snapshot"
+    timeouts: {boot_seconds: 150, evidence_seconds: 60}
+
+  - id: win11-uefi-sb-on
+    platform: Win11 UEFI Secure Boot ON
+    preconditions: [snapshot-before, rollback-after, evidence-capture, bks-lab-mode]
+    safe_action: "Validate trusted-boot checkpoints and confirm hardening posture."
+    expected_detection: [secure-boot-state-change-alert, boot-chain-integrity-alert, early-boot-anomaly-alert]
+    expected_hardening: [secure-boot-enforced, restricted-boot-config-change-control, integrity-baseline-policy]
+    evidence_required: [vm_disk_image, marker, event_logs]
+    pass_fail_criteria: [all-required-evidence-collected, hardening-controls-validated, rollback-confirmed]
+    vm_profile: win11-uefi-sb-on
+    vm_disk_image: lab/vms/win11-uefi-sb-on/disk.vhd
+    stage_simulators: [sim.uefi.marker]
+    drift_action: "simulate_secure_boot_state_drift"
+    rollback_policy: "restore_snapshot"
+    timeouts: {boot_seconds: 150, evidence_seconds: 60}
+
+  - id: classroom-acpi-annotation
+    platform: Classroom ACPI annotation lab
+    preconditions: [snapshot-before, rollback-after, evidence-capture, bks-lab-mode]
+    safe_action: "Emit a marker-only ACPI hook annotation and mock installer evidence; no ACPI/AML, firmware, disk, bootmgr, or winload writes."
+    expected_detection: [acpi-sys-boot-driver-baseline-alert, acpi-firmware-table-inventory-alert, secure-boot-state-change-alert, rollback-evidence-required]
+    expected_hardening: [offline-baseline-comparison, rollback-evidence-validated, no-live-acpi-aml-modification, boot-driver-integrity-baseline]
+    evidence_required: [vm_disk_image, marker, mock_installer, event_logs]
+    pass_fail_criteria: [all-required-evidence-collected, marker-only-acpi-annotation, non-operational-mock-installer, rollback-confirmed]
+    vm_profile: win11-uefi-sb-on
+    vm_disk_image: lab/vms/win11-uefi-sb-on/disk.vhd
+    stage_simulators: [sim.acpi.annotation.marker]
+    drift_action: "simulate_acpi_annotation_only"
+    rollback_policy: "restore_snapshot"
+    timeouts: {boot_seconds: 150, evidence_seconds: 60}

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boot Chain Lab — live</title>
+<meta name="description" content="A faithful simulated boot of 10biForthOS: real machine code and addresses, the serial compile protocol, and a live memory view.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;--good:#5fc27e;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.55;
+       padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
+  .wrap{max-width:960px;margin:0 auto}
+  a{color:var(--cyan)}
+  h1{font-family:var(--mono);font-size:clamp(1.3rem,4.5vw,2rem);margin:.1rem 0}
+  h1 .cy{color:var(--cyan)}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--amber)}
+  p{color:var(--muted);margin:.5rem 0}
+  code{font-family:var(--mono);color:var(--amber)}
+  nav{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid var(--line)}
+  nav a:hover{color:var(--fg);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+
+  .screen{font-family:var(--mono);background:#040a04;border:1px solid var(--amber);border-radius:8px;color:#8fe88f;
+    padding:14px;min-height:200px;max-height:300px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;
+    text-shadow:0 0 6px rgba(120,230,120,.35);font-size:.9rem;line-height:1.45;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:12px 0}
+  button{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 14px;
+    background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  button.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  label{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+  .term{font-family:var(--mono);font-size:.78rem;background:#05090c;border:1px solid var(--line);border-radius:8px;
+    padding:10px;height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:var(--muted);line-height:1.7}
+  .b01{color:var(--cyan)} .b00{color:var(--amber)} .bval{color:var(--fg)}
+  .dbg{display:grid;gap:12px;margin:14px 0}
+  @media(min-width:720px){.dbg{grid-template-columns:1fr 1fr}}
+  .dpanel{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;min-width:0}
+  .dpanel h3{margin:0 0 8px;font-family:var(--mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan)}
+  .regs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-family:var(--mono);font-size:.74rem}
+  .regs div{background:#05090c;border:1px solid var(--line);border-radius:5px;padding:5px 6px;overflow:hidden}
+  .regs b{color:var(--faint);font-weight:400;margin-right:4px}.regs span{color:var(--amber)}
+  .seg{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.9;margin-top:8px}
+  .seg b{color:var(--amber);font-weight:500}
+  .modepill{display:inline-block;font-family:var(--mono);font-size:.7rem;border:1px solid var(--line);border-radius:99px;padding:2px 9px;color:var(--good);margin:8px 6px 0 0}
+  .modepill.off{color:var(--faint);border-style:dashed}
+  .memregion{margin-bottom:11px}
+  .memregion .ml{font-family:var(--mono);font-size:.72rem;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+  .memregion .ml em{color:var(--faint);font-style:normal}
+  .cellwrap{overflow-x:auto}
+  .hexgrid{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;font-family:var(--mono);font-size:.7rem}
+  .hexc{width:21px;text-align:center;padding:2px 0;border-radius:3px;background:#05090c;color:var(--faint);border:1px solid transparent}
+  .hexc.nz{color:var(--fg);background:#0c1a1a;border-color:var(--cyan-dim)}
+  .hexc.chg{border-color:var(--cyan);color:var(--cyan)}
+  .hint{font-size:.72rem;color:var(--faint);margin-top:7px;font-family:var(--mono)}
+  footer{margin-top:22px;border-top:1px solid var(--line);padding-top:16px;font-family:var(--mono);font-size:.74rem;color:var(--faint)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* labs dropdown */
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+
+  /* chat over the wire */
+  .chat{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:16px;margin:20px 0 0}
+  .chat .ct{font-family:var(--mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan);margin:0}
+  .chat .csub{color:var(--muted);font-size:.84rem;margin:.3rem 0 0}
+  .conv{font-family:var(--mono);background:#040a04;border:1px solid var(--cyan-dim);border-radius:8px;color:#8fe88f;
+    padding:14px;min-height:150px;max-height:280px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;
+    text-shadow:0 0 6px rgba(120,230,120,.3);font-size:.88rem;line-height:1.5;margin:12px 0}
+  .conv .you{color:#bcd9ff} .conv .mp{color:#ffd27a}
+  .wire{font-family:var(--mono);font-size:.68rem;color:var(--faint);background:#05090c;border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;margin:12px 0 0;min-height:20px;word-break:break-all}
+  .wire .tx{color:var(--cyan)} .wire .rx{color:var(--amber)}
+  .chatform{display:flex;gap:8px;margin-top:10px}
+  .chatform input{flex:1;min-width:0;font-family:var(--mono);font-size:.85rem;background:#05090c;color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+  .chatform input:disabled{opacity:.5;cursor:not-allowed}
+  .chatform button{white-space:nowrap}
+  .cnote{font-size:.72rem;color:var(--faint);margin-top:11px;font-family:var(--mono);line-height:1.6}
+  .cnote b{color:var(--muted);font-weight:500}
+  /* nav: fade state changes; the live CTA lights on hover and fades away on leave/click-away; no sticky touch-hover */
+  nav a,.labs-btn{transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a.cta{color:var(--cyan)}
+  @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
+  @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+  .labs-panel[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a class="here" href="live.html">live</a>
+  
+      <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+    </nav>
+  <div class="eyebrow">Boot Chain Lab · live</div>
+  <h1>Run <span class="cy">10biForthOS</span></h1>
+  <p>A faithful <b>simulation</b>: the real machine code and memory addresses, the real <code>0x01&nbsp;&lt;byte&gt;&nbsp;…&nbsp;0x00</code> serial protocol, animated. The genuine CPU boot runs in QEMU on your machine via <code>./boot</code>; this is the shareable teaching view — it can't go blank.</p>
+
+  <div class="screen" id="screen" role="img" aria-label="simulated VGA screen"></div>
+
+  <div class="row">
+    <button id="bSimple" onclick="run('simple')">▶ upload simple.asm → A</button>
+    <button id="bHello" onclick="run('hello')">▶ upload hello-world.asm</button>
+    <button id="b3xc" onclick="run('3xc')">▶ 3xc.asm → 3XC</button>
+    <button id="bWake" onclick="run('wakeup')">▶ wake up, neo</button>
+    <button class="ghost" id="bReset" onclick="resetAll()">⟲ reset</button>
+  </div>
+
+  <label>serial line — the bytes going in (<span class="b01">01</span> compile · <span class="b00">00</span> execute)</label>
+  <div class="term" id="term" aria-label="serial stream"></div>
+
+  <div class="dbg">
+    <div class="dpanel">
+      <h3>CPU state</h3>
+      <div class="regs" id="regs"></div>
+      <div class="seg" id="seg"></div>
+      <div>
+        <span class="modepill">16-bit real mode</span>
+        <span class="modepill off">paging: off</span>
+      </div>
+      <div class="hint">physical = (segment &lt;&lt; 4) + offset · registers are illustrative; bytes &amp; addresses are real</div>
+    </div>
+    <div class="dpanel">
+      <h3>memory — live</h3>
+      <div id="mem"></div>
+      <div class="hint">execute buffer fills one byte per <span class="b01">01</span>&lt;byte&gt; as the program compiles</div>
+    </div>
+  </div>
+
+  <div class="chat">
+    <div class="ct">chat over the wire · Morpheus</div>
+    <p class="csub">The OS already speaks over a serial line (COM1). <code>morpheus.asm</code> reads your keypresses with BIOS <code>int&nbsp;0x14</code> and replies on screen — a guided conversation across the wire. This panel simulates that link so you can try it here.</p>
+    <div class="wire" id="wire" aria-hidden="true">COM1 · 44444 — idle</div>
+    <div class="conv" id="conv" role="log" aria-label="Morpheus conversation"></div>
+    <div class="row" id="bootRow">
+      <button id="bMorph" onclick="morphBoot()">▶ nc localhost 44444 · load morpheus.asm</button>
+    </div>
+    <form class="chatform" id="chatForm" hidden onsubmit="return morphSend()">
+      <input id="chatIn" autocomplete="off" placeholder="type to Morpheus — or r / b" disabled>
+      <button type="submit" id="chatBtn" disabled>send</button>
+    </form>
+    <div class="cnote">
+      <b>What&rsquo;s real, what&rsquo;s simulated.</b> The bytes, the <code>int&nbsp;0x14</code> read loop and <code>morpheus.asm</code> (368&nbsp;bytes) are real and on disk. The replies here are scripted in the page. A <em>real</em> chat needs three things this page stands in for: a <b>socket</b> (the TCP port QEMU opens on 44444), a <b>server</b> (morpheus.asm, reading the wire), and a <b>client</b> (<code>nc&nbsp;localhost&nbsp;44444</code>, your end). Wire those three together and the conversation is live metal.
+    </div>
+  </div>
+
+  <footer>faithful simulation · real metal boots in QEMU: <code>cd ~/bootkit/10biForthOS &amp;&amp; make floppy &amp;&amp; ./boot</code></footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var BANNER="10biForthOS\nbooted - speak Forth over serial (port 44444)\n";
+  // real boot-sector bytes (first 32) from nasm
+  var BOOT=[0x31,0xc0,0x8e,0xd8,0xbe,0x47,0x7c,0xe8,0x2e,0x00,0xb8,0x00,0x7e,0x8e,0xd8,0x31,
+            0xff,0xe8,0x17,0x00,0x3c,0x00,0x75,0x05,0xea,0x00,0x00,0x00,0x7e,0x3c,0x01,0x74];
+  var EX={
+    simple:{file:"simple.asm", out:"A",
+      mc:[0xb0,0x41,0xb4,0x0e,0xb7,0x00,0xcd,0x10,0xea,0x00,0x7c,0x00,0x00],
+      regs:{AX:0x0e41,BX:0x0007,CX:0,DX:0,SI:0,DI:0x000d,SP:0x7bfe,BP:0,CS:0x7e00,DS:0x7e00,ES:0,SS:0,IP:0x0008,FL:0x0202}},
+    hello:{file:"hello-world.asm", out:"Hello, World!",
+      mc:[0xb8,0x00,0x7e,0x8e,0xc0,0x30,0xff,0xbd,0x1f,0x00,0xb4,0x13,0xb3,0x0a,0xb0,0x01,
+          0x8b,0x0e,0x2c,0x00,0xb6,0x0b,0xb2,0x0a,0xcd,0x10,0xea,0x00,0x7c,0x00,0x00,
+          0x48,0x65,0x6c,0x6c,0x6f,0x2c,0x20,0x57,0x6f,0x72,0x6c,0x64,0x21,0x0d,0x00],
+      regs:{AX:0x1301,BX:0x000a,CX:0x000d,DX:0x0b0a,SI:0,DI:0x002e,SP:0x7bfe,BP:0x001f,CS:0x7e00,DS:0x7e00,ES:0x7e00,SS:0,IP:0x0019,FL:0x0202}},
+    "3xc":{file:"3xc.asm", out:"3XC",
+      mc:[0xb4,0x0e,0xb7,0x00,0xb0,0x33,0xcd,0x10,0xb0,0x58,0xcd,0x10,0xb0,0x43,0xcd,0x10,0xea,0x00,0x7c,0x00,0x00],
+      regs:{AX:0x0e43,BX:0x0000,CX:0,DX:0,SI:0,DI:0x0015,SP:0x7bfe,BP:0,CS:0x7e00,DS:0x7e00,ES:0,SS:0,IP:0x0010,FL:0x0202}},
+    wakeup:{file:"wakeup.asm",
+      type:"\nWake up, Neo...\n\nThe Matrix has you...\n\nFollow the white rabbit.\n\nKnock, knock, Neo.\n",
+      mc:[0xfc,0xbe,0x32,0x00,0xac,0x84,0xc0,0x74,0x1b,0x3c,0x1f,0x75,0x08,0xba,0x40,0x00,
+          0xe8,0x16,0x00,0xeb,0xef,0xb4,0x0e,0xbb,0x07,0x00,0xcd,0x10,0xba,0x06,0x00,0xe8,
+          0x07,0x00,0xeb,0xe0,0xea,0x00,0x7c,0x00,0x00,0xb9,0xff,0xff,0xe2,0xfe,0x4a,0x75,
+          0xf8,0xc3,0x0d,0x0a,0x57,0x61,0x6b,0x65,0x20,0x75,0x70,0x2c,0x20,0x4e,0x65,0x6f,
+          0x2e,0x2e,0x2e,0x0d,0x0a,0x1f,0x54,0x68,0x65,0x20,0x4d,0x61,0x74,0x72,0x69,0x78,
+          0x20,0x68,0x61,0x73,0x20,0x79,0x6f,0x75,0x2e,0x2e,0x2e,0x0d,0x0a,0x1f,0x46,0x6f,
+          0x6c,0x6c,0x6f,0x77,0x20,0x74,0x68,0x65,0x20,0x77,0x68,0x69,0x74,0x65,0x20,0x72,
+          0x61,0x62,0x62,0x69,0x74,0x2e,0x0d,0x0a,0x1f,0x4b,0x6e,0x6f,0x63,0x6b,0x2c,0x20,
+          0x6b,0x6e,0x6f,0x63,0x6b,0x2c,0x20,0x4e,0x65,0x6f,0x2e,0x0d,0x0a,0x00],
+      regs:{AX:0x0e00,BX:0x0007,CX:0x0000,DX:0x0006,SI:0x008e,DI:0,SP:0x7bfe,BP:0,CS:0x7e00,DS:0x7e00,ES:0,SS:0,IP:0x0024,FL:0x0202}}
+  };
+  var REST_REGS={AX:0,BX:0,CX:0,DX:0,SI:0x0047,DI:0,SP:0x7bfe,BP:0,CS:0x0000,DS:0x7e00,ES:0,SS:0,IP:0x0013,FL:0x0202};
+
+  var screen=document.getElementById("screen"), term=document.getElementById("term");
+  function hx2(n){return (n&0xff).toString(16).padStart(2,"0");}
+  function hx4(n){return (n&0xffff).toString(16).padStart(4,"0");}
+
+  // execute buffer model: 48 cells, filled as a program compiles
+  var exBuf=new Array(48).fill(0);
+  function renderMem(highlightUpTo){
+    var html="";
+    html+='<div class="memregion"><div class="ml"><span>boot sector <em>0x7c00</em></span><em>the Forth</em></div>'+
+          '<div class="cellwrap"><div class="hexgrid">'+
+          BOOT.map(function(b){return '<span class="hexc nz">'+hx2(b)+'</span>';}).join("")+
+          '</div></div></div>';
+    var nz=0; for(var i=0;i<exBuf.length;i++) if(exBuf[i]) nz++;
+    html+='<div class="memregion"><div class="ml"><span>execute buffer <em>0x7e00</em></span><em>'+nz+' / 48 written</em></div>'+
+          '<div class="cellwrap"><div class="hexgrid">';
+    for(var j=0;j<exBuf.length;j++){
+      var cls="hexc"+(exBuf[j]?" nz":"")+(highlightUpTo===j?" chg":"");
+      html+='<span class="'+cls+'">'+hx2(exBuf[j])+'</span>';
+    }
+    html+='</div></div></div>';
+    document.getElementById("mem").innerHTML=html;
+  }
+  function renderRegs(r){
+    var order=[["AX",r.AX],["BX",r.BX],["CX",r.CX],["DX",r.DX],["SI",r.SI],["DI",r.DI],["SP",r.SP],["BP",r.BP],
+               ["CS",r.CS],["DS",r.DS],["ES",r.ES],["SS",r.SS]];
+    document.getElementById("regs").innerHTML=
+      order.map(function(p){return '<div><b>'+p[0]+'</b><span>'+hx4(p[1])+'</span></div>';}).join("")+
+      '<div><b>IP</b><span>'+hx4(r.IP)+'</span></div>'+
+      '<div style="grid-column:span 3"><b>FLAGS</b><span>'+hx4(r.FL)+'</span></div>';
+    function phys(s,o){return "0x"+(((s<<4)+o)>>>0).toString(16).padStart(5,"0");}
+    document.getElementById("seg").innerHTML=
+      '<b>CS:IP</b> '+hx4(r.CS)+':'+hx4(r.IP)+' → '+phys(r.CS,r.IP)+'<br>'+
+      '<b>DS:SI</b> '+hx4(r.DS)+':'+hx4(r.SI)+' → '+phys(r.DS,r.SI);
+  }
+  function termWrite(html){ term.innerHTML+=html; term.scrollTop=term.scrollHeight; }
+  function screenWrite(s){ screen.textContent+=s; screen.scrollTop=screen.scrollHeight; }
+
+  var busy=false;
+  function setButtons(on){ ["bSimple","bHello","b3xc","bWake","bReset"].forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=!on;}); }
+
+  function resetAll(){
+    busy=false; setButtons(true);
+    screen.textContent="SeaBIOS (version rel-1.17.0)\nBooting from Floppy...\n\n"+BANNER;
+    term.innerHTML="";
+    exBuf=new Array(48).fill(0);
+    renderMem(-1); renderRegs(REST_REGS);
+  }
+  window.resetAll=resetAll;
+
+  window.run=function(which){
+    if(busy) return;
+    var e=EX[which]; busy=true; setButtons(false);
+    exBuf=new Array(48).fill(0);
+    termWrite('\n$ ./send examples/'+e.file+'  <span style="color:var(--faint)">('+e.mc.length+' bytes)</span>\n');
+    var i=0;
+    function done(){
+      screenWrite("\n"+BANNER);             // jmp 0:0x7c00 → re-inits, reprints banner
+      renderRegs(REST_REGS); busy=false; setButtons(true);
+    }
+    function typeOut(s, idx){                // typewriter effect for the Matrix intro
+      if(idx>=s.length){ setTimeout(done, reduce?0:500); return; }
+      screenWrite(s[idx]);
+      setTimeout(function(){ typeOut(s, idx+1); }, reduce?0:(s[idx]==='\n'?240:34));
+    }
+    function step(){
+      if(i<e.mc.length){
+        if(i<exBuf.length) exBuf[i]=e.mc[i];   // the real buffer is larger; the panel shows 48
+        termWrite('<span class="b01">01</span> <span class="bval">'+hx2(e.mc[i])+'</span> ');
+        renderMem(i<exBuf.length?i:-1);
+        i++;
+        if(reduce){ step(); } else { setTimeout(step, e.mc.length>40?20:90); }
+      } else {
+        termWrite('<span class="b00">00</span>  → execute\n');
+        renderMem(-1); renderRegs(e.regs);
+        if(e.type){ typeOut(e.type, 0); }       // draws letter-by-letter
+        else { screenWrite(e.out); setTimeout(done, reduce?0:450); }
+      }
+    }
+    step();
+  };
+
+  resetAll();
+})();
+</script>
+
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var conv=document.getElementById("conv"), wire=document.getElementById("wire");
+  var form=document.getElementById("chatForm"), input=document.getElementById("chatIn"), sendBtn=document.getElementById("chatBtn");
+  var busy=false, booted=false, done=false;
+  var INTRO="\nMORPHEUS: This is your last chance. After this, there is no turning back.\n  blue pill [b] -- the story ends.\n  red  pill [r] -- you stay in Wonderland.\n> ";
+
+  function hx(n){ return (n&0xff).toString(16).padStart(2,"0"); }
+  function showWire(dir,s){
+    var b=""; for(var i=0;i<s.length;i++) b+=hx(s.charCodeAt(i))+" ";
+    wire.innerHTML='COM1 \u00b7 44444 \u2014 <span class="'+(dir==="tx"?"tx":"rx")+'">'+dir+'</span> '+b.trim();
+  }
+  function addLine(text, cls){
+    var sp=document.createElement("span"); sp.className=cls; sp.textContent=text;
+    conv.appendChild(sp); conv.scrollTop=conv.scrollHeight;
+  }
+  function typeInto(text, cls, cb){
+    var sp=document.createElement("span"); sp.className=cls; conv.appendChild(sp);
+    var i=0;
+    (function tick(){
+      if(i>=text.length){ if(cb) cb(); return; }
+      sp.appendChild(document.createTextNode(text[i])); conv.scrollTop=conv.scrollHeight;
+      var ch=text[i]; i++;
+      setTimeout(tick, reduce?0:(ch==="\n"?170:22));
+    })();
+  }
+  function respond(v){
+    var s=v.trim().toLowerCase();
+    if(/^r$|^red/.test(s)) return "All I'm offering is the truth. Nothing more. You've been living in a dream world, Neo.";
+    if(/^b$|^blue/.test(s)) return "You wake up in your bed and believe whatever you want to believe. The story ends.";
+    if(/who.*you|your name|morpheus/.test(s)) return "I'm Morpheus. I've been looking for you my entire life.";
+    if(/matrix/.test(s)) return "The Matrix is everywhere. It is the world that has been pulled over your eyes to blind you from the truth.";
+    if(/\bfree\b|real|truth|wake/.test(s)) return "No one can be told what the Matrix is. You have to see it for yourself.";
+    if(/\bneo\b|^hi\b|hello|hey/.test(s)) return "Hello, Neo. I imagine you feel a bit like Alice -- tumbling down the rabbit hole.";
+    if(/pill/.test(s)) return "Blue pill [b], the story ends. Red pill [r], you stay in Wonderland. Choose.";
+    if(/exit|quit|bye/.test(s)) return "Remember: there is a difference between knowing the path and walking it.";
+    var r=["I can only show you the door. You're the one that has to walk through it.",
+           "What you know you can't explain, but you feel it.",
+           "Choose. r for the red pill, b for the blue.",
+           "The body cannot live without the mind."];
+    return r[Math.floor(Math.random()*r.length)];
+  }
+
+  window.morphBoot=function(){
+    if(booted) return; booted=true;
+    document.getElementById("bMorph").disabled=true;
+    addLine("\n$ ./send examples/morpheus.asm  (368 bytes)\n","mp");
+    showWire("tx","load morpheus.asm");
+    setTimeout(function(){
+      showWire("rx","intro");
+      typeInto(INTRO, "mp", function(){
+        form.hidden=false; input.disabled=false; sendBtn.disabled=false; input.focus();
+      });
+    }, reduce?0:420);
+  };
+  window.morphSend=function(){
+    var v=input.value.trim();
+    if(!v || busy || done) return false;
+    busy=true; input.disabled=true; sendBtn.disabled=true; input.value="";
+    addLine("\n> "+v+"\n","you");
+    showWire("tx", v+"\r");
+    var reply=respond(v), ends=/^(r$|red|b$|blue)/i.test(v);
+    setTimeout(function(){
+      showWire("rx","reply");
+      typeInto(reply+"\n", "mp", function(){
+        if(ends){
+          done=true;
+          addLine("\n(morpheus.asm chose its path and jmp'd back to 0:0x7c00 -- the Forth banner. reload to begin again.)\n","you");
+          wire.innerHTML='COM1 \u00b7 44444 \u2014 closed';
+          return;
+        }
+        busy=false; input.disabled=false; sendBtn.disabled=false; input.focus();
+      });
+    }, reduce?0:340);
+    return false;
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+build-local/
+build/
+classroom-controller/rust/target/
+node_modules/
+# QEMU chainloader scratch: overlays, per-run OVMF vars, and serial logs.
+# Overlays/vars are discarded on rollback; serial logs are raw boot output — keep out of git.
+lab/vms/.qemu-work/

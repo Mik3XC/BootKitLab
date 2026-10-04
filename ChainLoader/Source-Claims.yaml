@@ -1,0 +1,138 @@
+claims:
+  - claim_id: CLM-001
+    source: Chain-Loader.rtf
+    status: validated
+    tags: [architecture, control]
+    statement: "Legacy BIOS MBR bootstraps from 0x7C00 and can hand off to partition VBR."
+
+  - claim_id: CLM-002
+    source: Chain-Loader.rtf
+    status: validated
+    tags: [constraint]
+    statement: "MBR executable code space is constrained and should remain bootstrap-only."
+
+  - claim_id: CLM-003
+    source: ChainLoad-NoBCD.rtf
+    status: validated
+    tags: [architecture, constraint]
+    statement: "BCD manipulation requires a larger stage than the MBR and should be separated into stage-two logic."
+
+  - claim_id: CLM-004
+    source: ChainLoad-NoBCD.rtf
+    status: needs-lab-validation
+    tags: [hypothesis]
+    statement: "Stage-two loaders can process filesystem structures in a controlled lab image."
+
+  - claim_id: CLM-005
+    source: ChainLoadVBR.txt
+    status: validated
+    tags: [architecture]
+    statement: "The VBR can be used as a chain point between MBR bootstrap and OS loader stages."
+
+  - claim_id: CLM-006
+    source: ChainLoadVBR.txt
+    status: needs-lab-validation
+    tags: [control]
+    statement: "Rollback and backup gates are mandatory before any boot-sector simulation in VMs."
+
+  - claim_id: CLM-007
+    source: Chain-Load-BadPaths.rtf
+    status: validated
+    tags: [risk, constraint]
+    statement: "Secure Boot and signature checks are major blockers for unauthorized boot-file tampering."
+
+  - claim_id: CLM-008
+    source: Chain-Load-BadPaths.rtf
+    status: validated
+    tags: [architecture]
+    statement: "Boot stages of interest include VBR, bootmgr, and winload in legacy chains."
+
+  - claim_id: CLM-009
+    source: Chain-Loader-3-Hook-Theorized.rtf
+    status: deprecated/non-viable
+    tags: [risk]
+    statement: "Offensive hook-oriented persistence concepts are out of scope for defensive playbook implementation."
+
+  - claim_id: CLM-010
+    source: Chain-Loader-3-Hook-Theorized.rtf
+    status: needs-lab-validation
+    tags: [control]
+    statement: "Deterministic stage markers can be used instead of boot-file patching to validate monitoring paths."
+
+  - claim_id: CLM-011
+    source: BusyBoxChainload.rtf
+    status: validated
+    tags: [architecture]
+    statement: "UEFI boot flows rely on ESP entries and are controlled by firmware boot manager state."
+
+  - claim_id: CLM-012
+    source: BusyBoxChainload.rtf
+    status: validated
+    tags: [constraint]
+    statement: "Secure Boot policy materially changes whether unsigned pre-OS components can execute."
+
+  - claim_id: CLM-013
+    source: BusyBoxChainload.rtf
+    status: needs-lab-validation
+    tags: [control]
+    statement: "Defensive monitoring should include unauthorized UEFI boot-entry changes and ESP drift."
+
+  - claim_id: CLM-014
+    source: ChainLoad-ACPI.rtf
+    status: deprecated/non-viable
+    tags: [risk, constraint]
+    statement: "ACPI beep-code pathways are not reliable persistence channels on modern Windows boot chains."
+
+  - claim_id: CLM-015
+    source: ACPI-SequenceLot.rtf
+    status: deprecated/non-viable
+    tags: [risk]
+    statement: "PIT/beep firmware rewrites are fragile and unsuitable for repeatable defensive simulation goals."
+
+  - claim_id: CLM-016
+    source: ChainLoader-Memory-Bad.rtf
+    status: validated
+    tags: [constraint]
+    statement: "Arbitrary low-memory stashing is not a reliable cross-stage persistence mechanism in modern systems."
+
+  - claim_id: CLM-017
+    source: ChainLoader-Memory-Bad.rtf
+    status: validated
+    tags: [control]
+    statement: "Integrity baselines should target durable artifacts rather than transient pre-OS memory locations."
+
+  - claim_id: CLM-018
+    source: ChainLoad-PIT-Beep.s
+    status: deprecated/non-viable
+    tags: [risk]
+    statement: "Raw port-I/O beep experiments are excluded from core defensive validation scenarios."
+
+  - claim_id: CLM-019
+    source: Chain-Loader-SetStack-2.txt
+    status: validated
+    tags: [architecture]
+    statement: "Real-mode stage transitions are best represented as controlled handoff events in simulation."
+
+  - claim_id: CLM-020
+    source: Download filtered_builds_id10_24.json
+    status: deprecated/non-viable
+    tags: [risk]
+    statement: "Unrelated external data artifacts should be excluded from boot-chain control validation scope."
+
+  - claim_id: CLM-021
+    source: Wordware.The.Rootkit.Arsenal.May.2009 .pdf
+    status: validated
+    tags: [architecture, control]
+    statement: "Historical bootkit material is useful for teaching boot-chain position, but classroom artifacts must remain non-operational and evidence-only."
+
+  - claim_id: CLM-022
+    source: Wordware.The.Rootkit.Arsenal.May.2009 .pdf
+    status: validated
+    tags: [architecture, constraint]
+    statement: "ACPI firmware tables, the Windows acpi.sys driver stack role, and the Windows System Service Dispatch Table are distinct concepts that must not be collapsed into one hook model."
+
+  - claim_id: CLM-023
+    source: Mock-Installer-Manifest.yaml
+    status: validated
+    tags: [control]
+    statement: "The classroom installer is a mock manifest that emits would_stage, would_hook, would_chain, and would_restore evidence without deployment side effects."

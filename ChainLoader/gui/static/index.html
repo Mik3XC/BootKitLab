@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BootKitStudio GUI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <h1>BootKitStudio GUI</h1>
+      <p>Defensive boot-chain simulation console (BIOS + UEFI)</p>
+    </header>
+
+    <main class="grid">
+      <section class="card">
+        <h2>Scenario Runner</h2>
+        <div class="row">
+          <label for="mode">Mode</label>
+          <select id="mode">
+            <option value="baseline">baseline</option>
+            <option value="controlled-drift">controlled-drift</option>
+            <option value="recovery-validation">recovery-validation</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="scenario">Scenario</label>
+          <select id="scenario"></select>
+        </div>
+
+        <div class="actions">
+          <button id="runBtn">Run</button>
+          <button id="refreshScenariosBtn" class="secondary">Refresh Scenarios</button>
+        </div>
+
+        <pre id="runOutput" class="output"></pre>
+      </section>
+
+      <section class="card">
+        <h2>BootKit Dropper</h2>
+        <p class="muted">Defensive-only lab artifact intake (`.json`, `.yaml`, `.txt`, `.md`).</p>
+
+        <div id="dropZone" class="drop-zone">
+          Drop a defensive artifact here
+          <br />
+          <span>or choose a file below</span>
+        </div>
+
+        <input id="fileInput" type="file" />
+
+        <div class="actions">
+          <button id="uploadBtn">Upload Artifact</button>
+        </div>
+
+        <pre id="dropOutput" class="output"></pre>
+      </section>
+
+      <section class="card">
+        <h2>ASM Binary Stager</h2>
+        <p class="muted">Stages `.asm/.s/.o/.bin/.elf` for defensive simulation only.</p>
+
+        <div id="asmDropZone" class="drop-zone">
+          Drop an ASM module here
+          <br />
+          <span>or choose a binary/object file below</span>
+        </div>
+
+        <input id="asmFileInput" type="file" />
+
+        <div class="actions">
+          <button id="asmUploadBtn">Stage ASM Module</button>
+          <button id="asmRefreshBtn" class="secondary">Refresh Staged</button>
+        </div>
+
+        <ul id="asmList" class="compact-list"></ul>
+        <pre id="asmOutput" class="output"></pre>
+      </section>
+
+      <section class="card full-width">
+        <h2>Evidence Viewer</h2>
+        <div class="actions">
+          <button id="refreshEvidenceBtn">Refresh Evidence</button>
+        </div>
+        <div class="evidence-layout">
+          <ul id="evidenceList" class="evidence-list"></ul>
+          <pre id="evidenceContent" class="output tall"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

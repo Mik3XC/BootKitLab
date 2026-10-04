@@ -1,0 +1,5 @@
+mock_installer:
+  non_operational: true
+  phases: [would_stage, would_hook, would_chain, would_restore]
+  prohibited_actions: [disk-write, firmware-write, real-bootmgr-patch, real-winload-patch, persistent-installer, live-acpi-aml-modification]
+  evidence_contract: "Emit classroom evidence only; never deploy, persist, patch boot files, write firmware, or modify ACPI/AML."

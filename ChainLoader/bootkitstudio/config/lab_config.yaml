@@ -1,0 +1,4 @@
+vm_root: lab/vms
+allow_extensions: [.img, .qcow2, .vhd, .vmdk]
+require_lab_mode: true
+required_checks: [snapshot-before, rollback-after, evidence-capture]

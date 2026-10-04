@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RiskRegister",
+  "type": "object",
+  "required": ["risks"],
+  "properties": {
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "risk_id",
+          "boot_stage",
+          "threat",
+          "control",
+          "coverage",
+          "residual_risk",
+          "owner"
+        ],
+        "properties": {
+          "risk_id": {"type": "string"},
+          "boot_stage": {"type": "string"},
+          "threat": {"type": "string"},
+          "control": {"type": "string"},
+          "coverage": {"type": "string"},
+          "residual_risk": {"type": "string"},
+          "owner": {"type": "string"}
+        }
+      }
+    }
+  }
+}

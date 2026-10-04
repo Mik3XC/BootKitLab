@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChainLoader Classroom</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Marker-only classroom controller</p>
+          <h1>ChainLoader Classroom</h1>
+          <p class="lede">
+            Safe proof of concept for teaching boot-chain stages, ACPI vocabulary,
+            mock installer phases, and defensive evidence.
+          </p>
+        </div>
+        <div class="status-stack">
+          <span class="status-pill">Non-operational</span>
+          <span class="status-note">Baseline only</span>
+        </div>
+      </header>
+
+      <section class="control-band" aria-label="Evidence controls">
+        <label for="evidencePath">Evidence JSON path</label>
+        <input
+          id="evidencePath"
+          value="/output/evidence/classroom-rust-controller/classroom-acpi-annotation.baseline.2026-07-05T15:58:39Z.json"
+        />
+        <button id="loadEvidence" type="button">Load Evidence</button>
+        <button id="resetEvidence" type="button" class="secondary">Reset Demo</button>
+      </section>
+
+      <section class="lesson-layout">
+        <aside class="lesson-nav" aria-label="Teaching steps">
+          <button class="active" type="button" data-step="contract">Safety Contract</button>
+          <button type="button" data-step="mock">Mock Installer</button>
+          <button type="button" data-step="acpi">ACPI Clarification</button>
+          <button type="button" data-step="realmode">Real Mode Map</button>
+          <button type="button" data-step="detect">Detection Mapping</button>
+        </aside>
+
+        <section class="lesson-main">
+          <article class="lesson-copy">
+            <p class="eyebrow" id="lessonEyebrow">Step 01</p>
+            <h2 id="lessonTitle">Safety Contract</h2>
+            <p id="lessonBody"></p>
+          </article>
+
+          <div class="boot-map" aria-label="Boot chain map">
+            <div class="chain-node">BIOS</div>
+            <div class="chain-node">MBR</div>
+            <div class="chain-node">VBR</div>
+            <div class="chain-node">bootmgr</div>
+            <div class="chain-node">winload</div>
+            <div class="chain-node alt">ACPI annotation</div>
+          </div>
+        </section>
+      </section>
+
+      <section class="phase-grid" aria-label="Mock installer phases">
+        <article>
+          <span>01</span>
+          <h3>would_stage</h3>
+          <p>Discuss preparation without writing sectors, firmware, boot files, or persistent state.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>would_hook</h3>
+          <p>Label the conceptual hook point while keeping hook mechanics as non-runnable stubs.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>would_chain</h3>
+          <p>Show handoff order as a diagram and evidence event, not as a real control transfer.</p>
+        </article>
+        <article>
+          <span>04</span>
+          <h3>would_restore</h3>
+          <p>Connect rollback and evidence requirements to incident-response practice.</p>
+        </article>
+      </section>
+
+      <section class="two-column">
+        <article>
+          <h2>Blocked Actions</h2>
+          <ul id="blockedActions" class="blocked-list"></ul>
+        </article>
+        <article>
+          <h2>Marker Evidence</h2>
+          <dl id="markerEvidence"></dl>
+        </article>
+      </section>
+
+      <section class="two-column">
+        <article>
+          <h2>Class Prompts</h2>
+          <ul class="prompt-list">
+            <li>Why is ACPI firmware SSDT different from the Windows SSDT?</li>
+            <li>Where does the marker-only annotation sit in the story?</li>
+            <li>Which evidence proves this is not an installer?</li>
+            <li>What would defenders baseline or compare offline?</li>
+          </ul>
+        </article>
+        <article>
+          <h2>Evidence Summary</h2>
+          <div id="summary" class="summary"></div>
+        </article>
+      </section>
+
+      <section class="evidence-panel">
+        <div class="panel-heading">
+          <h2>Loaded Evidence</h2>
+          <span id="evidenceStatus">Demo data</span>
+        </div>
+        <pre id="evidenceJson"></pre>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+[org 0x7C00]
+bits 16
+
+start:
+    ; Set stack, print message, etc.
+
+    ; Load the second stage from disk (hardcoded LBA + sector count)
+    mov bx, LOAD_ADDR         ; ES:BX = target memory for stage 2
+    mov es, bx
+    xor bx, bx
+
+    mov dl, 0x80             ; first hard drive (example)
+    mov ah, 0x42             ; extended read
+    ; fill in DAP (Disk Address Packet) with LBA of stage2
+    ; call int 0x13
+    ; check error, handle or bail
+
+    jmp 0x9000:0x0000         ; jump to stage 2 code
+    ; ...
+; Partition table @ 0x1BE, signature 0x55AA @ 0x1FE
+
+; Fill remaining up to 446 bytes (minus code length), then partition table, then 0x55AA

@@ -1,0 +1,28 @@
+manifests:
+  - module_id: sim.mbr.marker
+    boot_stage: mbr
+    lang: assembly
+    input_contract: "No disk writes; marker-only simulation."
+    marker_contract: "SIM-MBR-STAGE-MARKER-V1"
+    allowed_side_effects: [memory-only-marker]
+
+  - module_id: sim.vbr.marker
+    boot_stage: vbr
+    lang: assembly
+    input_contract: "No disk writes; marker-only simulation."
+    marker_contract: "SIM-VBR-STAGE-MARKER-V1"
+    allowed_side_effects: [memory-only-marker]
+
+  - module_id: sim.uefi.marker
+    boot_stage: uefi
+    lang: assembly
+    input_contract: "No firmware writes; marker-only simulation."
+    marker_contract: "SIM-UEFI-STAGE-MARKER-V1"
+    allowed_side_effects: [memory-only-marker]
+
+  - module_id: sim.acpi.annotation.marker
+    boot_stage: acpi-annotation
+    lang: assembly
+    input_contract: "No ACPI/AML writes; marker-only classroom annotation."
+    marker_contract: "SIM-ACPI-ANNOTATION-MARKER-V1"
+    allowed_side_effects: [memory-only-marker, annotated-concept-only]

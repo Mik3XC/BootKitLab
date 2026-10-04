@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 5 — Wire Signatures</title>
+<meta name="description" content="Turn the 2003 MEOW/DCOM packet into a detection: key a Suricata/Zeek signature on the ISystemActivator GUID, the MEOW marker, the overlong UNC path and the NOP sled.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:132px}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  .k-guid{color:var(--info)} .k-meow{color:var(--amber)} .k-marb{color:var(--viol)} .k-unc{color:var(--good)} .k-sled{color:var(--crit)}
+  /* toggle + controls */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:.2rem 0 1rem}
+  .seg button{font-family:var(--mono);font-size:.8rem;background:transparent;color:var(--muted);border:0;padding:8px 15px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--cyan);color:#04100f;font-weight:600}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  /* hex grid */
+  .pktwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#05090c;padding:12px;margin-top:4px}
+  .hex{font-family:var(--mono);font-size:.74rem;line-height:1.9;white-space:pre}
+  .hex .off{color:var(--faint)}
+  .hex b{font-weight:400;color:var(--faint);padding:1px 2px;border-radius:3px}
+  .hex b.on.k-guid{color:#cfe6ff;background:#13273a}
+  .hex b.on.k-meow{color:#ffd27a;background:#2a2008}
+  .hex b.on.k-marb{color:#d9c6f2;background:#241b33}
+  .hex b.on.k-unc{color:#a7e8bf;background:#0e2417}
+  .hex b.on.k-sled{color:#ffb3b3;background:#2a1414}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:.72rem;color:var(--muted);margin:10px 0 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .alerts{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;margin-top:14px;font-family:var(--mono);font-size:.8rem;color:var(--muted);line-height:1.7}
+  .alerts .hit{color:var(--crit)} .alerts .ok{color:var(--good)} .alerts .q{color:var(--faint)}
+  .alerts .verdict{margin-top:8px;font-weight:600}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .s{color:var(--amber)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html" class="cur">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 5 · detection engineering</div>
+    <h1>The <span class="cy">MEOW</span> signature.</h1>
+    <p class="sub">Signal 02 was the hunt: an odd packet on the wire that said &ldquo;Meow.&rdquo; This is the blue-team ending — turning that 2003 DCOM/RPC exploit (<b>CVE-2003-0352 / MS03-026</b>, the Blaster hole) into a detection you could ship. The exploit left three things it couldn't hide. You key on all three.</p>
+    <div class="banner"><b>Detection only.</b> No exploit is built here. The packet below is a <em>representative reconstruction</em> carrying the genuine protocol markers (the ISystemActivator UUID, the MEOW/MARB tags), a NOP sled and an overlong UNC path — the fingerprints a sensor matches — not a working payload. Historical analysis, cited from the public NFR write-up.</p></div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — three fingerprints</div>
+  <h2>What the exploit can't hide</h2>
+  <p class="lede">A DCOM activation that carries this exploit has to be well-formed enough for the RPC service to parse it — and that well-formedness is the tell. Four byte-patterns survive every string-edit and mass-rooter variant:</p>
+  <div class="tbl">
+    <div class="r"><span class="lab k-guid">ISystemActivator</span><span class="d">The bind names the interface being targeted. Its UUID <code>000001a0-…-c000-…-46</code> appears on the wire little-endian as <code>a0 01 00 00 … c0 00 00 00 00 00 00 46</code>. Legitimate RemoteCreateInstance traffic to 135 is rare on most hosts — this GUID narrows the field hard.</span></div>
+    <div class="r"><span class="lab k-marb">MARB / MEOW</span><span class="d"><code>4d 41 52 42</code> (&ldquo;MARB&rdquo;) marshals the interface pointer; <code>4d 45 4f 57</code> (&ldquo;MEOW&rdquo;) prefixes every encoded object reference. MEOW is in <em>all</em> object-bearing RPC — so on its own it's weak. It's a confirmer, not a trigger.</span></div>
+    <div class="r"><span class="lab k-unc">overlong UNC</span><span class="d">The overflow lives in the server field of a <code>\\server\share</code> path, UTF-16LE on the wire: <code>5c 00 5c 00</code> then a name far past 32 bytes. Length + location is the real signal.</span></div>
+    <div class="r"><span class="lab k-sled">NOP sled</span><span class="d">A long run of <code>90 90 90…</code> padding the landing zone before the jump. A sled inside a path field has no legitimate reason to exist — a near-certain giveaway.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — run the signature</div>
+  <h2>Match it on the wire</h2>
+  <p class="lede">A reconstructed MSRPC request to TCP&nbsp;135. Pick a sample, then run the signature: it scans the bytes for the four fingerprints, highlights each where it lands, and emits the alerts a sensor would. The benign RPC bind should come back clean — that's the part that keeps you from paging the on-call at 3am over normal traffic.</p>
+  <div class="seg" role="group" aria-label="sample packet">
+    <button id="sAtk" aria-pressed="true" onclick="setPkt('atk')">exploit attempt</button>
+    <button id="sBen" aria-pressed="false" onclick="setPkt('ben')">benign RPC bind</button>
+  </div>
+  <div class="controls">
+    <button class="btn" id="runBtn" onclick="runSig()">▶ run signature</button>
+    <button class="btn ghost" onclick="resetSig()">reset</button>
+  </div>
+  <div class="pktwrap"><div class="hex" id="hex"></div></div>
+  <div class="legend" aria-hidden="true">
+    <span><i style="background:#13273a;border:1px solid var(--info)"></i>ISystemActivator GUID</span>
+    <span><i style="background:#241b33;border:1px solid var(--viol)"></i>MARB</span>
+    <span><i style="background:#2a2008;border:1px solid var(--amber)"></i>MEOW</span>
+    <span><i style="background:#0e2417;border:1px solid var(--good)"></i>UNC \\</span>
+    <span><i style="background:#2a1414;border:1px solid var(--crit)"></i>NOP sled</span>
+  </div>
+  <div class="alerts" id="alerts">Pick a sample and run the signature.</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the rules</div>
+  <h2>What you'd actually deploy</h2>
+  <p class="lede">The scan above is these rules, by hand. A two-stage Suricata signature keys the cheap, specific thing first (the GUID bind) and confirms with the payload shape, so the expensive content match only runs on traffic already headed for the RPC activator:</p>
+  <pre><span class="c"># stage 1 — the targeted interface bind (cheap, specific)</span>
+<span class="k">alert</span> tcp any any -> $HOME_NET <span class="s">135</span> ( \
+  msg:<span class="s">"DCERPC ISystemActivator bind (MS03-026 attack surface)"</span>; \
+  flow:to_server,established; \
+  content:<span class="s">"|05 00 0b|"</span>; depth:3; <span class="c">; RPC v5 bind</span> \
+  content:<span class="s">"|a0 01 00 00 00 00 00 00 c0 00 00 00 00 00 00 46|"</span>; distance:0; \
+  reference:cve,2003-0352; classtype:attempted-admin; sid:1000026; rev:1; )
+
+<span class="c"># stage 2 — the payload shape: MEOW object ref + UNC path + NOP sled</span>
+<span class="k">alert</span> tcp any any -> $HOME_NET <span class="s">135</span> ( \
+  msg:<span class="s">"DCERPC RemoteCreateInstance long UNC + NOP sled (Blaster/MS03-026)"</span>; \
+  flow:to_server,established; \
+  content:<span class="s">"MEOW"</span>; \
+  content:<span class="s">"|5c 00 5c 00|"</span>; distance:0; <span class="c">; \\ in UTF-16LE</span> \
+  content:<span class="s">"|90 90 90 90 90 90 90 90|"</span>; <span class="c">; sled in the path</span> \
+  reference:cve,2003-0352; classtype:attempted-admin; sid:1000027; rev:1; )</pre>
+  <p class="lede">And the Zeek equivalent, for the same GUID on the same port — Zeek then logs the connection so the match carries its own evidence:</p>
+  <pre><span class="k">signature</span> dcom_isystemactivator {
+  ip-proto == tcp
+  dst-port == <span class="s">135</span>
+  payload /\x05\x00\x0b.{0,64}\xa0\x01\x00\x00\x00\x00\x00\x00\xc0\x00\x00\x00\x00\x00\x00\x46/
+  event <span class="s">"DCOM ISystemActivator bind (MS03-026 surface)"</span>
+}</pre>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>A signature is a snapshot, not a truth</h2>
+  <p class="lede">This exact rule was real in 2003, and it would miss plenty today. That's the lesson, not a flaw:</p>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">String-edits beat byte-matching.</b> The moment a variant re-encodes the sled (metamorphic padding) or pads the UNC name differently, a literal <code>content</code> match drifts. NFR watched this happen in real time as mass-rooters rolled in — which is why they moved from "find the shellcode" to tracking connection <em>state</em>.</li>
+    <li><b style="color:var(--fg)">State beats a single packet.</b> Their durable version didn't alert on bytes alone: it required the <code>ISystemActivator</code> bind, <em>then</em> confirmation the server accepted it, <em>then</em> the suspicious path in a follow-up — so it fired on real exploitation and stayed quiet on rejected or garbage traffic. Flow state is what kept the false-positive rate survivable.</li>
+    <li><b style="color:var(--fg)">Signatures and behaviour are a pair.</b> This lab catches the <em>known</em> shape precisely and cheaply; Lab 4 catches the <em>unknown</em> channel by its rhythm. Encryption kills the signature and leaves the beacon; a novel exploit kills the beacon model and leaves the signature. You run both.</li>
+  </ul>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 6 — memory forensics: the sled landed <em>somewhere</em>, and the one place an implant must become real is RAM.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 5 · wire signatures · CVE-2003-0352 / MS03-026 · reconstruct the markers, never the payload · source: <a href="https://websites.umich.edu/~cja/LPS12b/refs/blaster.html" target="_blank" rel="noopener">NFR rapid-response write-up</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var mode="atk";
+  // representative MSRPC/DCOM activation — real protocol markers, no working payload
+  var ATK=[
+    {k:"hdr",  b:[0x05,0x00,0x0b,0x03,0x10,0x00,0x00,0x00,0x48,0x00,0x00,0x00,0x7f,0x00,0x00,0x00]},
+    {k:"ctx",  b:[0xd0,0x16,0xd0,0x16,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x00,0x01,0x00]},
+    {k:"guid", b:[0xa0,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46]},
+    {k:"marb", b:[0x4d,0x41,0x52,0x42,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0d,0xf0,0xad,0xba]},
+    {k:"meow", b:[0x4d,0x45,0x4f,0x57,0x04,0x00,0x00,0x00,0xa2,0x01,0x00,0x00,0x00,0x00,0x00,0x00]},
+    {k:"unc",  b:[0x5c,0x00,0x5c,0x00,0x46,0x00,0x58,0x00,0x46,0x00,0x58,0x00,0x4e,0x00,0x42,0x00,0x46,0x00,0x58,0x00]},
+    {k:"sled", b:[0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90]},
+    {k:"pay",  b:[0xeb,0x10,0x5e,0x31,0xc9,0xcc,0xcc,0xcc]}
+  ];
+  var BEN=[
+    {k:"hdr",  b:[0x05,0x00,0x0b,0x03,0x10,0x00,0x00,0x00,0x48,0x00,0x00,0x00,0x00,0x00,0x00,0x00]},
+    {k:"ctx",  b:[0xd0,0x16,0xd0,0x16,0x00,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x00,0x01,0x00]},
+    {k:"guid2",b:[0xc4,0xfe,0xfc,0x99,0x60,0x52,0x1b,0x10,0xbb,0xcb,0x00,0xaa,0x00,0x21,0x34,0x7a]},
+    {k:"data", b:[0x00,0x00,0x00,0x00,0x02,0x00,0x00,0x00,0x05,0x00,0x06,0x00,0x01,0x00,0x00,0x00]},
+    {k:"data", b:[0x44,0x00,0x43,0x00,0x24,0x00,0x00,0x00,0x01,0x10,0x08,0x00,0x00,0x00,0x00,0x00]}
+  ];
+  var MATCH={guid:true,marb:true,meow:true,unc:true,sled:true}; // which keys the signature colours
+
+  function flat(chunks){ var o=[],i,j; for(i=0;i<chunks.length;i++) for(j=0;j<chunks[i].b.length;j++) o.push({v:chunks[i].b[j],k:chunks[i].k}); return o; }
+  function hx(n){ return (n&0xff).toString(16).padStart(2,"0"); }
+  function off(n){ return n.toString(16).padStart(4,"0"); }
+
+  function render(scan){
+    var bytes=flat(mode==="atk"?ATK:BEN), html="", i;
+    for(i=0;i<bytes.length;i++){
+      if(i%16===0){ if(i) html+="\n"; html+='<span class="off">0x'+off(i)+'</span>  '; }
+      var cell=bytes[i], cls="", on=scan && MATCH[cell.k];
+      if(on) cls=" on k-"+cell.k;
+      html+='<b class="'+(on?cls.trim():"")+'">'+hx(cell.v)+'</b> ';
+    }
+    document.getElementById("hex").innerHTML=html;
+  }
+  function setPkt(m){
+    mode=m;
+    document.getElementById("sAtk").setAttribute("aria-pressed", m==="atk");
+    document.getElementById("sBen").setAttribute("aria-pressed", m==="ben");
+    resetSig();
+  }
+  window.setPkt=setPkt;
+  function resetSig(){ render(false); document.getElementById("alerts").textContent="Pick a sample and run the signature."; }
+  window.resetSig=resetSig;
+
+  window.runSig=function(){
+    render(true);
+    var a=document.getElementById("alerts");
+    if(mode==="atk"){
+      a.innerHTML=
+        '<div><span class="hit">[sid:1000026]</span> ISystemActivator UUID found in RPC v5 bind \u2192 targeted-interface activation.</div>'+
+        '<div><span class="hit">[sid:1000027]</span> MEOW object reference + <code>\\\\</code> UNC path (UTF-16LE) + 16-byte NOP sled in the path field.</div>'+
+        '<div class="q">corroborating: MARB marshalled-pointer tag present.</div>'+
+        '<div class="verdict"><span class="hit">MATCH \u2014 MS03-026 exploitation attempt</span> (CVE-2003-0352). Both stages fired: bind + payload shape.</div>';
+    }else{
+      a.innerHTML=
+        '<div class="q">RPC v5 bind to 135 \u2014 interface UUID is IOXIDResolver (c4fefc99-\u2026), not ISystemActivator.</div>'+
+        '<div class="q">no MEOW object reference, no <code>\\\\</code> UNC path, no NOP sled.</div>'+
+        '<div class="verdict"><span class="ok">NO MATCH \u2014 benign RPC</span>. Neither stage fired; nothing paged.</div>';
+    }
+  };
+
+  setPkt("atk");
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

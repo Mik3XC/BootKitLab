@@ -1,0 +1,48 @@
+risks:
+  - risk_id: RSK-001
+    boot_stage: firmware
+    threat: Unauthorized boot-order or boot-entry modification
+    control: Monitor and alert on boot-entry drift in lab and production telemetry
+    coverage: high
+    residual_risk: medium
+    owner: Detection Engineering
+
+  - risk_id: RSK-002
+    boot_stage: esp
+    threat: EFI partition boot file integrity drift
+    control: Hash baseline + change control for ESP artifacts
+    coverage: medium
+    residual_risk: medium
+    owner: Platform Security
+
+  - risk_id: RSK-003
+    boot_stage: mbr-vbr
+    threat: Legacy boot-sector chain tampering in unsupported endpoints
+    control: Legacy endpoint isolation and boot-integrity monitoring
+    coverage: medium
+    residual_risk: high
+    owner: Endpoint Engineering
+
+  - risk_id: RSK-004
+    boot_stage: os-loader
+    threat: Boot loader state drift that bypasses approved startup policy
+    control: Loader integrity attestation + incident triage runbook
+    coverage: medium
+    residual_risk: medium
+    owner: Incident Response
+
+  - risk_id: RSK-005
+    boot_stage: acpi
+    threat: Confusing ACPI firmware tables, acpi.sys driver-stack behavior, and Windows SSDT call-table hooking
+    control: Classroom ACPI annotation marker + explicit terminology separation + boot-driver baseline
+    coverage: medium
+    residual_risk: medium
+    owner: Detection Engineering
+
+  - risk_id: RSK-006
+    boot_stage: classroom-poc
+    threat: Teaching artifact drifts into a deployable installer or persistent bootkit workflow
+    control: Non-operational mock installer manifest + prohibited-action evidence + tests
+    coverage: high
+    residual_risk: low
+    owner: Platform Security

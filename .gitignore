@@ -1,0 +1,12 @@
+# heavy / local build + evidence artifacts (keep the source, not the output)
+ChainLoader/build-local/
+ChainLoader/build/
+ChainLoader/output/evidence/
+ChainLoader/**/*.pdf
+ChainLoader/.venv/
+ChainLoader/lab/vms/.qemu-work/
+10biForthOS/*.com
+10biForthOS/*.flp
+10biForthOS/code.o
+.DS_Store
+**/.DS_Store

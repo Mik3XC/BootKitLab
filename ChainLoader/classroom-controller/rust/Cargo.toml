@@ -1,0 +1,8 @@
+[package]
+name = "chainloader-classroom-controller"
+version = "0.1.0"
+edition = "2021"
+description = "Safe classroom controller for ChainLoader marker-only scenarios"
+license = "UNLICENSED"
+
+[dependencies]

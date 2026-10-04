@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>*{box-sizing:border-box}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+  /* labs dropdown */
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+</style>
+</head>
+<body>
+<title>Boot Chain Lab</title>
+<meta name="description" content="A visual walkthrough of a defensive boot-chain integrity lab and a 512-byte Forth OS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: a pre-OS firmware/POST console — one dark world, phosphor on near-black,
+     amber marks the boot stages, cyan marks the defensive instrumentation. */
+  :root{
+    --bg:#0a0e12; --panel:#10161d; --panel-2:#0d1318; --line:#1f2a33;
+    --fg:#d7e0e6; --muted:#8294a0; --faint:#5a6a74;
+    --amber:#e8a13a; --amber-dim:#7a5a28; --cyan:#43c0b8; --cyan-dim:#1f4f4c;
+    --good:#5fc27e; --warn:#e8a13a; --crit:#e05c5c;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.3rem,4vw,1.9rem);font-weight:600;letter-spacing:-.01em}
+  h3{font-size:1.05rem;font-weight:600}
+  .mono{font-family:var(--mono)}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;
+           color:var(--amber);font-weight:600}
+  .eyebrow.cy{color:var(--cyan)}
+  p{margin:.6rem 0;color:var(--fg)}
+  .lede{color:var(--muted)}
+  section{padding-block:clamp(2.2rem,6vw,3.6rem);border-top:1px solid var(--line)}
+
+  /* header */
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);
+         backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;
+        padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+
+  /* hero */
+  .hero{padding-block:clamp(2.4rem,7vw,4rem)}
+  .post{font-family:var(--mono);font-size:.82rem;color:var(--faint);border:1px solid var(--line);
+        border-radius:10px;background:var(--panel-2);padding:14px 16px;margin:1.3rem 0;min-width:0;overflow-x:auto}
+  .post b{color:var(--cyan);font-weight:600}
+  .post .ok{color:var(--good)}
+  .hero h1{font-family:var(--mono);font-size:clamp(2rem,8vw,3.4rem);font-weight:700;letter-spacing:-.02em;margin:.2rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{font-size:clamp(1rem,2.6vw,1.2rem);color:var(--muted);max-width:60ch}
+  .tagrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:1.1rem}
+  .tag{font-family:var(--mono);font-size:.72rem;color:var(--muted);border:1px solid var(--line);
+       border-radius:99px;padding:4px 11px}
+
+  /* generic card */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}}
+
+  /* boot chain */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:.4rem 0 1rem}
+  .seg button{font-family:var(--mono);font-size:.8rem;background:transparent;color:var(--muted);
+              border:0;padding:8px 14px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--amber);color:#160f03;font-weight:600}
+  .chain{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin-top:.4rem}
+  .stage{flex:1 1 auto;min-width:92px}
+  .stage button{width:100%;height:100%;font-family:var(--mono);font-size:.78rem;cursor:pointer;
+    background:var(--panel-2);color:var(--fg);border:1px solid var(--line);padding:12px 8px;border-radius:9px;
+    transition:border-color .15s,background .15s;display:flex;flex-direction:column;gap:3px;align-items:center}
+  .stage button:hover{border-color:var(--amber-dim)}
+  .stage button[aria-pressed=true]{border-color:var(--amber);background:#161108;box-shadow:0 0 0 1px var(--amber) inset}
+  .stage .n{color:var(--faint);font-size:.64rem}
+  .arrow{align-self:center;color:var(--faint);padding:0 3px;font-family:var(--mono)}
+  @media(max-width:520px){.arrow{display:none}.chain{gap:7px}.stage{flex:1 1 44%}}
+  #stageDetail{margin-top:14px}
+  .kv{display:flex;gap:10px;font-family:var(--mono);font-size:.8rem;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .kv span:first-child{color:var(--muted);min-width:116px}
+
+  /* cycle */
+  .cycle{display:grid;gap:10px;margin-top:.5rem}
+  @media(min-width:680px){.cycle{grid-template-columns:repeat(4,1fr)}}
+  .step{border:1px solid var(--line);border-radius:10px;padding:13px;background:var(--panel-2);transition:.2s}
+  .step .lab{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+  .step h4{margin:.25rem 0;font-size:.95rem;font-family:var(--mono);font-weight:600}
+  .step p{font-size:.84rem;color:var(--muted);margin:.2rem 0 0}
+  .step[data-on=true]{border-color:var(--cyan);background:#0c1a1a;box-shadow:0 0 0 1px var(--cyan) inset}
+  .step[data-on=true] .lab{color:var(--cyan)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:.3rem 0 1rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;
+       background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;color:var(--muted)}
+  .checks{list-style:none;padding:0;margin:.4rem 0 0;font-family:var(--mono);font-size:.82rem}
+  .checks li{display:flex;gap:9px;padding:3px 0;color:var(--muted)}
+  .checks li::before{content:"□";color:var(--faint)}
+  .checks li[data-ok=true]{color:var(--fg)}
+  .checks li[data-ok=true]::before{content:"✓";color:var(--good)}
+
+  /* code / json */
+  pre{font-family:var(--mono);font-size:.78rem;background:var(--panel-2);border:1px solid var(--line);
+      border-radius:10px;padding:13px;overflow-x:auto;margin:.5rem 0;line-height:1.5}
+  pre .k{color:var(--cyan)} pre .s{color:var(--amber)} pre .c{color:var(--faint)}
+
+  /* forth sector */
+  .sector{display:flex;flex-wrap:wrap;gap:2px;font-family:var(--mono);font-size:.62rem;margin:.6rem 0}
+  .cellwrap{overflow-x:auto}
+  .code-cell{width:11px;height:14px;background:var(--cyan-dim)}
+  .pad-cell{width:11px;height:14px;background:#141c22}
+  .sig-cell{width:11px;height:14px;background:var(--amber)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-top:6px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+  /* byte inspector */
+  .screen{font-family:var(--mono);background:#040a04;border:1px solid var(--amber-dim);border-radius:8px;
+    color:#8fe88f;padding:12px;min-height:150px;max-height:230px;overflow-y:auto;white-space:pre-wrap;
+    word-break:break-word;text-shadow:0 0 6px rgba(120,230,120,.4);font-size:.82rem;line-height:1.5}
+  .bytes{font-family:var(--mono);font-size:.74rem;line-height:1.9;word-break:break-all}
+  .b01{color:var(--cyan)} .bval{color:var(--fg)} .b00{color:var(--amber)}
+  .flabel{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:12px}
+
+  /* map */
+  .map{display:grid;gap:14px}
+  @media(min-width:680px){.map{grid-template-columns:1fr 1fr}}
+  .piece{border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:10px;padding:14px;background:var(--panel)}
+  .piece h4{margin:0 0 .25rem;font-family:var(--mono);font-size:.95rem}
+  .piece p{font-size:.86rem;color:var(--muted);margin:0}
+  .piece .st{font-family:var(--mono);font-size:.68rem;color:var(--faint);margin-top:7px;display:block}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  .thesis{font-size:clamp(1.1rem,3vw,1.45rem);font-weight:600;max-width:40ch;line-height:1.3}
+  .thesis .cy{color:var(--cyan)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  .signal{font-family:var(--mono);border-left:2px solid var(--amber);background:var(--panel-2);
+    border-radius:0 12px 12px 0;padding:22px 24px;margin:3rem 0 .5rem;color:var(--muted);line-height:1.75;font-size:.9rem;min-width:0;
+    box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .signal .sh{font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);margin-bottom:11px;display:flex;gap:9px;align-items:center}
+  .signal .sigbtn{margin-left:auto;font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--amber);background:transparent;border:1px solid var(--amber-dim);border-radius:6px;padding:4px 11px;cursor:pointer;
+    transition:background-color .22s ease,color .22s ease}
+  .signal .sigbtn:hover{background:var(--amber);color:#160f03}
+  .signal .fieldnote{font-size:.8rem;color:var(--muted);line-height:1.65;margin:.85rem 0 0;border-top:1px dashed var(--line);padding-top:.8rem}
+  .signal .fieldnote code{color:var(--amber);font-size:.92em}
+  .signal .fieldnote a{color:var(--cyan)}
+  .signal .fieldnote b{color:var(--fg);font-weight:600}
+  .signal .sh .bl{width:7px;height:13px;background:var(--amber);display:inline-block;animation:sigbl 1.1s step-end infinite}
+  .signal q{quotes:none;color:var(--fg)}
+  .signal .sig{display:block;margin-top:11px;color:var(--cyan);font-size:.78rem;letter-spacing:.04em}
+  @keyframes sigbl{50%{opacity:0}}
+  @media(prefers-reduced-motion:reduce){.signal .bl{animation:none}}
+  /* nav: fade state changes; the live CTA lights on hover and fades away on leave/click-away; no sticky touch-hover */
+  nav a,.labs-btn{transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a.cta{color:var(--cyan)}
+  @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
+  @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+</style>
+
+<header>
+  <div class="wrap bar">
+    <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+    <nav>
+      <a href="#chain">boot chain</a>
+      <a href="#chainloader">chainloader</a>
+      <a href="#forth">forth os</a>
+      <a href="live.html" class="cta">▶ boot it live</a>
+    
+      <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="eyebrow">Undercover Blueteamer · pre-OS integrity</div>
+    <h1>The five seconds<br>before <span class="cy">the OS</span>.</h1>
+    <p class="sub">Everything that runs before your operating system does — firmware, boot sector, loader — is where the quietest attacks live. This is a lab that <b>measures</b> that ground instead of weaponizing it: snapshot a VM, boot it, hash what happened, roll back. Plus a 512-byte Forth OS, to show the whole chain from the first instruction up.</p>
+    <div class="post mono" aria-hidden="true">
+SeaBIOS (version rel-1.17.0)<br>
+Booting from Hard Disk...<br>
+<span class="ok">10biForthOS</span><br>
+booted - speak Forth over serial (port 44444)<br>
+&gt; snapshot-before <span class="ok">ok</span> · boot <span class="ok">ok</span> · evidence <span class="ok">captured</span> · rollback <span class="ok">confirmed</span>
+    </div>
+    <div class="tagrow">
+      <span class="tag">x86 real mode</span><span class="tag">UEFI / Secure Boot</span><span class="tag">QEMU + OVMF</span>
+      <span class="tag">SHA-256 evidence</span><span class="tag">NASM</span><span class="tag">C++17</span><span class="tag">Forth</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="signal" role="note" aria-label="signal">
+    <div class="sh"><span class="bl" aria-hidden="true"></span><span id="sigLabel">// SIGNAL 01 &mdash; 04:04</span><button class="sigbtn" id="sigToggle" onclick="nextSignal()" aria-label="show next signal">signal 02 &rsaquo;</button></div>
+    <div class="sigbody" id="sig1">
+      <q>It was 2:00&nbsp;AM and now 3:00&nbsp;AM, but I&rsquo;ve been diving deeper into Assembly and the kernel, now it feels like it was 4:00&nbsp;AM an hour ago, but it&rsquo;s only 4:04&nbsp;AM now. The depth of the SHELL has me&hellip; Welcome to assembly, the building blocks of technology and architecture today :) where you are only allowed to learn past 1&nbsp;AM.</q>
+      <span class="sig">&mdash; 3XC</span>
+    </div>
+    <div class="sigbody" id="sig2" hidden>
+      <q>It was some 3-odd years ago when I was unpacking a threat hunt on Wireshark and came across an odd packet &mdash; an easter egg, a DCOM-hole over a socket with hex that translated to &ldquo;Meow&rdquo;. The Meow Packet. Down the rabbit hole we went to get my cat back, with a BLASTER RPC and a CVE from 2003.</q>
+      <p class="fieldnote"><b>The Meow Packet.</b> The four bytes <code>4d&nbsp;45&nbsp;4f&nbsp;57</code> &mdash; &ldquo;MEOW&rdquo; &mdash; prefix every object reference marshalled over MSRPC/DCOM. In 2003 that marker rode an <code>ISystemActivator</code> bind on TCP&nbsp;135 into a UNC-path buffer overflow behind a <code>0x90</code> NOP sled: <b>CVE-2003-0352 / MS03-026</b>, the hole the Blaster worm wore. For a hunter it&rsquo;s a gift &mdash; the MEOW prefix, the GUID, and the sled are exactly the fingerprints you key a detection on. <a href="https://websites.umich.edu/~cja/LPS12b/refs/blaster.html" target="_blank" rel="noopener">NFR&rsquo;s rapid-response writeup &rarr;</a></p>
+      <span class="sig">&mdash; 3XC</span>
+    </div>
+    <div class="sigbody" id="sig3" hidden>
+      <q>Perception is the mechanism. But at what point does perception become self-fulfilling prophecy? Then at what point does it take hold and become the reality? When does it switch &mdash; when does &lsquo;One&rsquo; become a red-teamer, working in Blue?</q>
+      <span class="sig">&mdash; 3XC</span>
+    </div>
+  </div>
+</div>
+
+<section id="chain"><div class="wrap">
+  <div class="eyebrow">01 — the terrain</div>
+  <h2>How a machine wakes up</h2>
+  <p class="lede">Power hits the CPU and it runs firmware, which hands off stage by stage until an OS is in control. Each handoff is a place code can be swapped. Pick a path and tap a stage.</p>
+
+  <div class="seg" role="group" aria-label="Boot path">
+    <button id="legacyBtn" aria-pressed="true" onclick="setPath('legacy')">Legacy BIOS / MBR</button>
+    <button id="uefiBtn" aria-pressed="false" onclick="setPath('uefi')">UEFI / Secure Boot</button>
+  </div>
+
+  <div class="chain" id="chainRow"></div>
+  <div class="card" id="stageDetail"></div>
+</div></section>
+
+<section id="chainloader"><div class="wrap">
+  <div class="eyebrow cy">02 — the instrument</div>
+  <h2>ChainLoader / BootKitStudio</h2>
+  <p class="lede">A defensive simulator. It never writes a boot sector or firmware — it models each stage as a <b>marker</b>, runs a VM under hard guardrails, and emits JSON evidence a SOC can read. The core loop is four steps, and it fails closed if any safety gate is missing.</p>
+
+  <div class="controls">
+    <button class="btn" id="runBtn" onclick="runCycle()">▶ Run scenario</button>
+    <button class="btn ghost" id="modeBtn" aria-pressed="false" onclick="toggleMode()">mode: simulated</button>
+    <span class="mono" id="runNote" style="color:var(--faint);font-size:.78rem"></span>
+  </div>
+
+  <div class="cycle" id="cycle"></div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h3>Guardrails (fail-closed)</h3>
+      <ul class="checks" id="guards">
+        <li data-ok=false>BKS_LAB_MODE=1 required</li>
+        <li data-ok=false>VM image under lab/vms only</li>
+        <li data-ok=false>reject /dev/* physical disks</li>
+        <li data-ok=false>snapshot · rollback · evidence preconditions</li>
+        <li data-ok=false>base image never written (overlay only)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Evidence bundle</h3>
+      <pre id="evidence"><span class="c">// run a scenario to capture evidence</span></pre>
+    </div>
+  </div>
+</div></section>
+
+<section id="forth"><div class="wrap">
+  <div class="eyebrow">03 — the first instruction</div>
+  <h2>10biForthOS — a Forth in 512 bytes</h2>
+  <p class="lede">The smallest honest version of the whole chain: one boot sector that is a working Forth. It fits in the 512 bytes BIOS loads, ending in the <span class="mono">0x55AA</span> signature. It speaks a two-byte protocol over the serial line — <span class="mono b01">0x01</span> <span class="mono">&lt;byte&gt;</span> compiles one byte; <span class="mono b00">0x00</span> runs what you compiled.</p>
+
+  <div class="card">
+    <h3>The sector — 512 bytes</h3>
+    <div class="cellwrap"><div class="sector" id="sector" aria-hidden="true"></div></div>
+    <div class="legend">
+      <span><i style="background:var(--cyan)"></i>134 bytes of code (incl. boot splash)</span>
+      <span><i style="background:#141c22;border:1px solid var(--line)"></i>zero padding</span>
+      <span><i style="background:var(--amber)"></i>0x55 0xAA signature</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Byte inspector</h3>
+    <p class="lede" style="font-size:.86rem">Pick a program. See how a few lines of assembly become the raw bytes the OS compiles over serial — and what lands on screen.</p>
+    <div class="seg" role="group" aria-label="Example program">
+      <button id="exSimple" aria-pressed="true" onclick="setEx('simple')">simple.asm</button>
+      <button id="exHello" aria-pressed="false" onclick="setEx('hello')">hello-world.asm</button>
+    </div>
+    <div class="grid g2">
+      <div style="min-width:0">
+        <div class="flabel">1 · assembly</div>
+        <pre id="exAsm"></pre>
+        <div class="flabel">2 · machine code <span id="exLen" style="color:var(--muted)"></span></div>
+        <pre id="exMc" class="bytes"></pre>
+      </div>
+      <div style="min-width:0">
+        <div class="flabel">3 · serial stream <span style="color:var(--muted)">(<span class="b01">01</span>=compile · <span class="b00">00</span>=execute)</span></div>
+        <pre id="exStream" class="bytes"></pre>
+        <div class="flabel" style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+          <span>4 · the console</span>
+          <button class="btn" id="runConsole" style="padding:5px 11px;font-size:.74rem" onclick="playConsole()">▶ boot &amp; run</button>
+        </div>
+        <div class="screen" id="exScreen" role="img" aria-label="simulated QEMU serial console"></div>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section id="map"><div class="wrap">
+  <div class="eyebrow cy">04 — the whole lab</div>
+  <h2>One thesis, four pieces</h2>
+  <p class="thesis" style="margin:.4rem 0 1.2rem">Learn the offense cold, then build the thing that <span class="cy">catches</span> it — not the thing that does it.</p>
+  <div class="map">
+    <div class="piece"><h4>ChainLoader / BootKitStudio</h4><p>Boot-chain integrity simulator: snapshot → boot → evidence → rollback, marker-only, guardrailed. The subject of this page.</p><span class="st">C++17 · NASM · QEMU/OVMF</span></div>
+    <div class="piece"><h4>Detection Lab + Vertical</h4><p>Local telemetry → explainable SQL detections → hand-traced evidence notebook with a hash-chained journal. The SOC side.</p><span class="st">Zeek · osquery · DuckDB · C++</span></div>
+    <div class="piece"><h4>10biForthOS</h4><p>A 512-byte Forth OS booted over serial — the boot chain from its very first instruction, nothing hidden.</p><span class="st">x86 real mode · NASM</span></div>
+    <div class="piece"><h4>idtscan</h4><p>Read-only IDT/GDT integrity checks — spot a planted ring-0 gate, never plant one. Detection, by design.</p><span class="st">Linux · Windows (kd) · macOS notes</span></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  measure, don't weaponize · boot-chain integrity lab · built in the open
+</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var PATHS={
+    legacy:[
+      {k:"CPU / Power",n:"reset vector",d:"The CPU leaves reset and begins executing firmware from a fixed address. Nothing on disk has run yet."},
+      {k:"BIOS",n:"firmware",d:"Legacy firmware initializes hardware and loads the first 512-byte sector of the boot disk into memory at 0x7C00."},
+      {k:"MBR",n:"sector 0",d:"Master Boot Record: tiny bootstrap code, the partition table, and the 0x55AA signature. First place attacker code can live on disk."},
+      {k:"VBR",n:"volume",d:"Volume Boot Record — first sector of the active partition — continues the handoff toward the OS loader."},
+      {k:"bootmgr",n:"win mgr",d:"Windows Boot Manager selects an entry and loads the OS loader. Tampering here is a classic bootkit foothold."},
+      {k:"winload",n:"os loader",d:"Loads the kernel and early drivers. After this the OS is in control — and so is anything that subverted an earlier stage."}
+    ],
+    uefi:[
+      {k:"CPU / Power",n:"reset vector",d:"CPU leaves reset into firmware. On modern machines that firmware is UEFI."},
+      {k:"UEFI",n:"firmware",d:"UEFI firmware reads boot entries and launches an EFI executable from the EFI System Partition (ESP)."},
+      {k:"ESP",n:"fat partition",d:"EFI System Partition: a FAT volume holding .efi boot applications. The modern equivalent of the MBR's bootstrap."},
+      {k:"bootmgfw.efi",n:"win mgr",d:"The Windows Boot Manager, as a signed EFI application. Secure Boot checks its signature before it runs."},
+      {k:"Secure Boot",n:"policy",d:"Firmware verifies each pre-OS component against a signature database. The control ChainLoader's win11-uefi-sb-on scenario validates."},
+      {k:"winload.efi",n:"os loader",d:"Loads the kernel. From here the OS takes over."}
+    ]
+  };
+  var path="legacy", stage=0;
+  function render(){
+    var el=document.getElementById("chainRow"); el.innerHTML="";
+    var list=PATHS[path];
+    list.forEach(function(s,i){
+      var w=document.createElement("div"); w.className="stage";
+      var b=document.createElement("button");
+      b.setAttribute("aria-pressed", i===stage?"true":"false");
+      b.innerHTML='<span class="n">'+String(i+1).padStart(2,"0")+'</span>'+s.k;
+      b.onclick=function(){stage=i;render();};
+      w.appendChild(b); el.appendChild(w);
+      if(i<list.length-1){var a=document.createElement("span");a.className="arrow";a.textContent="→";el.appendChild(a);}
+    });
+    var s=list[stage];
+    document.getElementById("stageDetail").innerHTML=
+      '<div class="eyebrow">stage '+String(stage+1).padStart(2,"0")+'</div>'+
+      '<h3 style="margin:.3rem 0 .1rem">'+s.k+' <span class="mono" style="color:var(--faint);font-weight:400">'+s.n+'</span></h3>'+
+      '<p style="margin:.4rem 0 0;color:var(--muted)">'+s.d+'</p>';
+  }
+  window.setPath=function(p){
+    path=p; stage=0;
+    document.getElementById("legacyBtn").setAttribute("aria-pressed",p==="legacy");
+    document.getElementById("uefiBtn").setAttribute("aria-pressed",p==="uefi");
+    render();
+  };
+  render();
+
+  // ---- ChainLoader cycle ----
+  var STEPS=[
+    {lab:"snapshot-before",h:"qemu-img overlay",p:"A qcow2 overlay is created over the base image. The base is read-only backing — never written."},
+    {lab:"boot",h:"qemu-system",p:"The overlay boots headless with a hard timeout and no guest network. Early boot is measured, not completed."},
+    {lab:"evidence-capture",h:"hash + serial",p:"Overlay hash, serial-log hash, Secure Boot posture and boot result are written to the evidence bundle."},
+    {lab:"rollback-after",h:"discard overlay",p:"The overlay is deleted and the base image is re-hashed: identical in = rollback confirmed."}
+  ];
+  var mode="simulated";
+  function paintCycle(active){
+    var el=document.getElementById("cycle"); el.innerHTML="";
+    STEPS.forEach(function(s,i){
+      var d=document.createElement("div"); d.className="step"; d.setAttribute("data-on", i<=active && active>=0);
+      d.innerHTML='<div class="lab">'+String(i+1).padStart(2,"0")+' · '+s.lab+'</div><h4>'+s.h+'</h4><p>'+s.p+'</p>';
+      el.appendChild(d);
+    });
+  }
+  paintCycle(-1);
+  window.toggleMode=function(){
+    mode = mode==="simulated" ? "real" : "simulated";
+    var b=document.getElementById("modeBtn");
+    b.textContent="mode: "+mode; b.setAttribute("aria-pressed", mode==="real");
+    document.getElementById("runNote").textContent = mode==="real"
+      ? "real: needs QEMU + a bootable image ≥1MiB"
+      : "simulated: placeholder image, no hypervisor needed";
+  };
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  function evJson(){
+    var boot = mode==="real" ? '"exited rc=0"' : '"simulated"';
+    var ov = mode==="real" ? '"sha256:d944a4…"' : 'null';
+    return '{\n'+
+      '  <span class="k">"scenario_id"</span>: <span class="s">"win11-uefi-sb-off"</span>,\n'+
+      '  <span class="k">"verdict"</span>: <span class="s">"PASS"</span>,\n'+
+      '  <span class="k">"qemu_mode"</span>: <span class="s">"'+mode+'"</span>,\n'+
+      '  <span class="k">"qemu_boot"</span>: <span class="s">'+boot+'</span>,\n'+
+      '  <span class="k">"overlay_sha256"</span>: <span class="s">'+ov+'</span>,\n'+
+      '  <span class="k">"rollback_confirmed"</span>: <span class="s">true</span>,\n'+
+      '  <span class="k">"alerts"</span>: [<span class="s">"boot-chain:qemu-'+(mode==="real"?"measured-boot":"simulated-only")+'"</span>]\n'+
+      '}';
+  }
+  window.runCycle=function(){
+    var guards=document.querySelectorAll("#guards li");
+    guards.forEach(function(g){g.setAttribute("data-ok","false");});
+    document.getElementById("evidence").innerHTML='<span class="c">// running '+mode+' scenario…</span>';
+    var gi=0, si=0;
+    function gstep(){ if(gi<guards.length){guards[gi].setAttribute("data-ok","true");gi++;setTimeout(gstep,reduce?0:180);} else cstep(); }
+    function cstep(){ if(si<STEPS.length){paintCycle(si);si++;setTimeout(cstep,reduce?0:420);} else {
+      document.getElementById("evidence").innerHTML=evJson();
+    } }
+    if(reduce){guards.forEach(function(g){g.setAttribute("data-ok","true");});paintCycle(STEPS.length-1);document.getElementById("evidence").innerHTML=evJson();return;}
+    gstep();
+  };
+
+  // ---- Forth sector map ----
+  (function(){
+    var el=document.getElementById("sector"); if(!el) return;
+    var frag=document.createDocumentFragment();
+    for(var i=0;i<512;i++){
+      var c=document.createElement("span");
+      c.className = i<134 ? "code-cell" : (i>=510 ? "sig-cell" : "pad-cell");
+      frag.appendChild(c);
+    }
+    el.appendChild(frag);
+  })();
+
+  // ---- Byte inspector ----
+  var EX={
+    simple:{
+      asm:["mov al,'A'      ; 'A' = 0x41","mov ah,0x0E     ; BIOS teletype","mov bh,0x00","int 0x10        ; draw it","jmp 0:0x7c00    ; back to boot"],
+      mc:[0xb0,0x41,0xb4,0x0e,0xb7,0x00,0xcd,0x10,0xea,0x00,0x7c,0x00,0x00],
+      out:"A"
+    },
+    hello:{
+      asm:["mov ax,0x7e00","mov es,ax","xor bh,bh","mov bp,msg","mov ah,0x13    ; write string","mov bl,0x0A    ; green","mov al,1","mov cx,[msg_length]","mov dh,11 / dl,10","int 0x10","jmp 0:0x7c00","msg db 'Hello, World!'"],
+      mc:[0xb8,0x00,0x7e,0x8e,0xc0,0x30,0xff,0xbd,0x1f,0x00,0xb4,0x13,0xb3,0x0a,0xb0,0x01,0x8b,0x0e,0x2c,0x00,0xb6,0x0b,0xb2,0x0a,0xcd,0x10,0xea,0x00,0x7c,0x00,0x00,0x48,0x65,0x6c,0x6c,0x6f,0x2c,0x20,0x57,0x6f,0x72,0x6c,0x64,0x21,0x0d,0x00],
+      out:"Hello, World!"
+    }
+  };
+  function hx(b){return b.toString(16).padStart(2,"0");}
+  function setEx(which){
+    var e=EX[which];
+    document.getElementById("exSimple").setAttribute("aria-pressed",which==="simple");
+    document.getElementById("exHello").setAttribute("aria-pressed",which==="hello");
+    document.getElementById("exAsm").textContent=e.asm.join("\n");
+    document.getElementById("exLen").textContent="· "+e.mc.length+" bytes";
+    document.getElementById("exMc").innerHTML=e.mc.map(function(b){return '<span class="bval">'+hx(b)+'</span>';}).join(" ");
+    var stream=[];
+    e.mc.forEach(function(b){stream.push('<span class="b01">01</span>');stream.push('<span class="bval">'+hx(b)+'</span>');});
+    stream.push('<span class="b00">00</span>');
+    document.getElementById("exStream").innerHTML=stream.join(" ");
+    restFrame(e);
+  }
+  var curEx="simple", playToken=0;
+  function restFrame(e){
+    // complete-at-rest: show the finished console state; the button re-animates it
+    document.getElementById("exScreen").textContent=
+      "SeaBIOS (version rel-1.17.0)\nBooting from Floppy...\n\n10biForthOS\nbooted - speak Forth over serial (port 44444)\n"+e.out;
+  }
+  window.setEx=function(w){curEx=w;setEx(w);};
+  window.playConsole=function(){
+    var e=EX[curEx], scr=document.getElementById("exScreen");
+    var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    if(reduce){restFrame(e);return;}
+    var my=++playToken;
+    var frames=[];
+    frames.push("SeaBIOS (version rel-1.17.0)");
+    frames.push("Booting from Floppy...");
+    frames.push("");
+    frames.push("10biForthOS");
+    frames.push("booted - speak Forth over serial (port 44444)");
+    frames.push("── host ──");
+    frames.push("$ ./send examples/"+curEx+".asm");
+    frames.push("   nasm → "+e.mc.length+" bytes");
+    var fr=e.mc.map(function(b){return hx(b);});
+    frames.push("   serial → 01 "+fr.slice(0,6).join(" 01 ")+" … 00");
+    frames.push("   compiled "+e.mc.length+" bytes, executed");
+    frames.push("── screen ──");
+    frames.push(e.out);
+    scr.textContent="";
+    var i=0;
+    (function tick(){
+      if(my!==playToken) return;            // superseded by a newer run
+      scr.textContent += (i?"\n":"") + frames[i];
+      scr.scrollTop = scr.scrollHeight;
+      i++;
+      if(i<frames.length) setTimeout(tick, 230);
+    })();
+  };
+  setEx("simple");
+})();
+</script>
+
+
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+<script>
+(function(){
+  var i=1, N=3;
+  var labels={1:"// SIGNAL 01 \u2014 04:04",2:"// SIGNAL 02 \u2014 the meow packet",3:"// SIGNAL 03 \u2014 perception"};
+  var nextName={1:"signal 02 \u203a",2:"signal 03 \u203a",3:"signal 01 \u203a"};
+  window.nextSignal=function(){
+    i = i % N + 1;
+    for(var k=1;k<=N;k++){ var el=document.getElementById("sig"+k); if(el) el.hidden=(k!==i); }
+    document.getElementById("sigLabel").innerHTML = labels[i];
+    document.getElementById("sigToggle").innerHTML = nextName[i];
+  };
+})();
+</script>
+</body>
+</html>

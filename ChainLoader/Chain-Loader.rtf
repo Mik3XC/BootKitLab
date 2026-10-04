@@ -1,0 +1,187 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2821
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 ; ----------------------------------------------------------------------------------\
+; custom_mbr.asm \'96 Minimal "Hello World" MBR chain-loader (Legacy BIOS only)\
+; ----------------------------------------------------------------------------------\
+; WARNING: This is *educational* code. Writing this to your real hard drive MBR\
+; could corrupt your system if something goes wrong. Use a VM or backup first.\
+; \
+; Assemble with: nasm -f bin custom_mbr.asm -o custom_mbr.bin\
+; Then (VERY DANGEROUS): dd if=custom_mbr.bin of=/dev/sdX bs=512 count=1\
+; (Replace sdX with correct disk; do NOT do this on a live system unless you know exactly\
+; what you\'92re doing.)\
+; \
+; This code does:\
+; 1) Displays a short text line via BIOS interrupt 0x10.\
+; 2) Locates the active partition in the partition table.\
+; 3) Loads the first sector of that partition (the Volume Boot Record) to 0x7E00:0000.\
+; 4) Jumps there, allowing Windows (or any OS) to continue booting.\
+; \
+; The last two bytes must be 0x55, 0xAA to mark the sector as bootable for a BIOS system.\
+; \
+; Key offsets:\
+;   - Partition table starts at 0x1BE from start of sector\
+;   - Signature at 0x1FE (the last two bytes of the 512-byte sector)\
+; \
+; ----------------------------------------------------------------------------------\
+\
+[org 0x7C00]          ; BIOS loads the MBR at 0x0000:0x7C00 in real mode\
+bits 16\
+\
+start:\
+    ; ------------------------------------------------------------------------\
+    ; Set up a stack (just use top of our 512-byte segment for simplicity).\
+    ; This is minimal and not recommended for advanced tasks, but enough for demo.\
+    ; ------------------------------------------------------------------------\
+    xor ax, ax\
+    mov ss, ax\
+    mov sp, 0x7C00\
+\
+    ; Set DS = 0 for now (so that DS:SI points to somewhere in 0x0000 segment).\
+    mov ds, ax\
+\
+    ; ------------------------------------------------------------------------\
+    ; Print message: "Custom MBR: Hello from the boot sector!"\
+    ; ------------------------------------------------------------------------\
+    mov si, hello_message\
+    call print_string\
+\
+    ; ------------------------------------------------------------------------\
+    ; Find the active partition (marked 0x80 in status field),\
+    ; store the CHS and drive info so we can read it.\
+    ; ------------------------------------------------------------------------\
+    mov bx, PARTITION_TABLE_OFFSET  ; offset of the first partition entry (0x1BE)\
+    mov cx, 4                       ; there are up to 4 partition entries\
+find_active_partition:\
+    push cx\
+\
+    mov al, [bx]   ; partition status (0x80 = active)\
+    cmp al, 0x80\
+    je partition_found\
+\
+    ; Not active; go to the next entry\
+    add bx, 16     ; each partition entry is 16 bytes\
+    pop cx\
+    loop find_active_partition\
+\
+    ; If none found, just hang\
+no_active_partition:\
+    call print_line\
+    mov si, error_no_active\
+    call print_string\
+    jmp halt\
+\
+partition_found:\
+    ; ------------------------------------------------------------------------\
+    ; [bx]      = status (0x80 active)\
+    ; [bx+1]    = start head\
+    ; [bx+2]    = start sector + high bits of cylinder\
+    ; [bx+3]    = start cylinder\
+    ; [bx+4..7] = partition type / system ID\
+    ; [bx+8..11]= start LBA\
+    ; [bx+12..15]= number of sectors in partition\
+    ; We'll do a CHS-based load below. (MBR, older approach)\
+    ; For modern large drives, LBA is more common, but CHS suffices for demonstration.\
+    ; ------------------------------------------------------------------------\
+    mov dl, [BOOT_DRIVE]        ; dl set by BIOS to the boot drive number\
+    ; Actually, older BIOS sets DL to the drive that was booted from (0x80 first HDD).\
+    ; We'll rely on that. If needed, read it from our code or store it.\
+\
+    mov dh, [bx+1]              ; start head\
+    mov cl, [bx+2]              ; start sector + upper 2 bits of cylinder in bits 6-7\
+    mov ch, [bx+3]              ; start cylinder\
+    ; We'll store them in memory so read_disk routine can use them\
+    mov [part_head], dh\
+    mov [part_sector], cl\
+    mov [part_cyl], ch\
+\
+    ; ------------------------------------------------------------------------\
+    ; Now read the Volume Boot Record (VBR) of that active partition\
+    ; CHS addressing: we read 1 sector from the start of that partition.\
+    ; Load to 0x7E00:0000 for safety.\
+    ; ------------------------------------------------------------------------\
+    call read_vbr\
+\
+    ; If successful, jump to the loaded code\
+    jmp 0x7E0:0x0000\
+\
+    ; We shouldn\'92t really come back from here if the VBR is valid.\
+\
+; ------------------------------------------------------------------------\
+; BIOS INT 0x13 read routine (very basic, no error checks!)\
+; Reads 1 sector at CHS (ch, cl, dh) from drive in dl into ES:BX = 0x7E0:0x0000\
+; ------------------------------------------------------------------------\
+read_vbr:\
+    mov ax, 0x7E0\
+    mov es, ax\
+    xor bx, bx\
+\
+    mov ah, 0x02     ; function 2 = read sectors\
+    mov al, 1        ; read 1 sector\
+    mov ch, [part_cyl]\
+    mov cl, [part_sector]\
+    mov dh, [part_head]\
+    ; dl is already set to boot drive (0x80 for HDD)\
+    int 0x13\
+\
+    ; no error checks or retries for brevity\
+    ret\
+\
+; ------------------------------------------------------------------------\
+; print_string: prints a zero-terminated string at DS:SI using BIOS Teletype\
+; ------------------------------------------------------------------------\
+print_string:\
+.next_char:\
+    lodsb                   ; AL = [DS:SI], SI++\
+    or al, al              ; test if AL == 0?\
+    jz .done\
+    mov ah, 0x0E           ; BIOS teletype function\
+    int 0x10\
+    jmp .next_char\
+.done:\
+    ret\
+\
+; ------------------------------------------------------------------------\
+; print_line: prints a newline+carriage return\
+; ------------------------------------------------------------------------\
+print_line:\
+    mov ah, 0x0E\
+    mov al, 0x0D   ; carriage return\
+    int 0x10\
+    mov al, 0x0A   ; line feed\
+    int 0x10\
+    ret\
+\
+halt:\
+    cli\
+    hlt\
+    jmp halt\
+\
+; ------------------------------------------------------------------------\
+; Data Section\
+; ------------------------------------------------------------------------\
+hello_message db "Custom MBR: Hello from the boot sector!", 0\
+error_no_active db "No active partition found! System halted.", 0\
+\
+; We'll store the discovered CHS data here:\
+part_head   db 0\
+part_sector db 0\
+part_cyl    db 0\
+\
+; BIOS typically passes the boot drive # in DL = 0x80 for the first HDD.\
+; If you want to force a specific value, you could define a variable here.\
+BOOT_DRIVE db 0x80   ; Usually 0x80 is the first hard drive\
+\
+PARTITION_TABLE_OFFSET equ 0x1BE\
+\
+; Fill up to 510 bytes with 0\
+times 510 - ($-$$) db 0\
+\
+; 0x55AA signature at the last 2 bytes\
+dw 0xAA55\
+}

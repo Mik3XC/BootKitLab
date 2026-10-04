@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MockInstallerManifest",
+  "type": "object",
+  "required": ["mock_installer"],
+  "properties": {
+    "mock_installer": {
+      "type": "object",
+      "required": [
+        "non_operational",
+        "phases",
+        "prohibited_actions",
+        "evidence_contract"
+      ],
+      "properties": {
+        "non_operational": {"type": "boolean", "const": true},
+        "phases": {
+          "type": "array",
+          "items": {"type": "string"},
+          "allOf": [
+            {"contains": {"const": "would_stage"}},
+            {"contains": {"const": "would_hook"}},
+            {"contains": {"const": "would_chain"}},
+            {"contains": {"const": "would_restore"}}
+          ]
+        },
+        "prohibited_actions": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "evidence_contract": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

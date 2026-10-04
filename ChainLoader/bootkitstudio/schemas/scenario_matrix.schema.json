@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScenarioMatrix",
+  "type": "object",
+  "required": ["scenarios"],
+  "properties": {
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "platform",
+          "preconditions",
+          "safe_action",
+          "expected_detection",
+          "expected_hardening",
+          "evidence_required",
+          "pass_fail_criteria",
+          "vm_profile",
+          "vm_disk_image",
+          "stage_simulators",
+          "drift_action",
+          "rollback_policy",
+          "timeouts"
+        ],
+        "properties": {
+          "id": {"type": "string"},
+          "platform": {"type": "string"},
+          "preconditions": {"type": "array", "items": {"type": "string"}},
+          "safe_action": {"type": "string"},
+          "expected_detection": {"type": "array", "items": {"type": "string"}},
+          "expected_hardening": {"type": "array", "items": {"type": "string"}},
+          "evidence_required": {"type": "array", "items": {"type": "string"}},
+          "pass_fail_criteria": {"type": "array", "items": {"type": "string"}},
+          "vm_profile": {"type": "string"},
+          "vm_disk_image": {"type": "string"},
+          "stage_simulators": {"type": "array", "items": {"type": "string"}},
+          "drift_action": {"type": "string"},
+          "rollback_policy": {"type": "string"},
+          "timeouts": {
+            "type": "object",
+            "required": ["boot_seconds", "evidence_seconds"],
+            "properties": {
+              "boot_seconds": {"type": "integer", "minimum": 1},
+              "evidence_seconds": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}

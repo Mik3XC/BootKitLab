@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvidenceBundle",
+  "type": "object",
+  "required": [
+    "scenario_id",
+    "timestamp",
+    "vm_id",
+    "baseline_hashes",
+    "delta_hashes",
+    "events",
+    "alerts",
+    "analyst_notes",
+    "verdict"
+  ],
+  "properties": {
+    "scenario_id": {"type": "string"},
+    "timestamp": {"type": "string"},
+    "vm_id": {"type": "string"},
+    "baseline_hashes": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "delta_hashes": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "events": {"type": "array", "items": {"type": "string"}},
+    "alerts": {"type": "array", "items": {"type": "string"}},
+    "analyst_notes": {"type": "string"},
+    "verdict": {"type": "string", "enum": ["PASS", "FAIL"]}
+  }
+}

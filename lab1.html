@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 1 — Boot Persistence</title>
+<meta name="description" content="How a boot-stage foothold works, modeled with non-operational markers, and how the lab detects and rolls it back.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* firmware-console world, matching the walkthrough: amber = boot stages, cyan = instrumentation */
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--amber);font-weight:600}
+  .eyebrow.cy{color:var(--cyan)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  .mono{font-family:var(--mono)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);
+         backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.7rem,6vw,2.8rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:62ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;
+          font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+
+  .where{display:grid;gap:8px;margin-top:.5rem}
+  .where .loc{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:var(--panel-2)}
+  .where .loc .lab{font-family:var(--mono);font-size:.78rem;color:var(--amber);min-width:128px}
+  .where .loc .d{font-size:.88rem;color:var(--muted)}
+
+  .refuse{list-style:none;padding:0;margin:.4rem 0 0;display:grid;gap:5px}
+  .refuse li{font-family:var(--mono);font-size:.82rem;color:var(--fg);display:flex;gap:9px}
+  .refuse li::before{content:"✕";color:var(--crit);font-weight:700}
+
+  /* flow stepper */
+  .steps{display:flex;gap:6px;flex-wrap:wrap;margin:.3rem 0 1rem}
+  .steps button{font-family:var(--mono);font-size:.74rem;cursor:pointer;background:var(--panel-2);color:var(--muted);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;flex:1 1 auto;min-width:92px;text-align:left}
+  .steps button[aria-pressed=true]{border-color:var(--cyan);background:#0c1a1a;color:var(--fg);box-shadow:0 0 0 1px var(--cyan) inset}
+  .steps .n{display:block;color:var(--faint);font-size:.64rem}
+  .flowbox{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;min-width:0}
+  .flowbox h3{font-family:var(--mono);font-size:1rem;margin:0 0 .2rem}
+  .flowbox .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--cyan)}
+  .controls{display:flex;gap:10px;margin:.3rem 0 1rem;flex-wrap:wrap}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 14px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  pre{font-family:var(--mono);font-size:.78rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+      padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.55}
+  pre .k{color:var(--cyan)} pre .s{color:var(--amber)} pre .c{color:var(--faint)} pre .g{color:var(--good)} pre .r{color:var(--crit)}
+  .evtlist{font-family:var(--mono);font-size:.8rem;margin:.4rem 0 0;padding:0;list-style:none}
+  .evtlist li{padding:3px 0;color:var(--muted);border-bottom:1px dashed var(--line)}
+  .evtlist li b{color:var(--amber);font-weight:500}
+  .alert{color:var(--warn)}
+  .footlink{font-family:var(--mono);font-size:.82rem}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  .folk{width:100%;border-collapse:collapse;font-size:.82rem;min-width:540px}
+  .folk th,.folk td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  .folk th{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  .folk td:first-child{font-family:var(--mono);color:var(--amber);white-space:nowrap}
+  .folk td:nth-child(2){color:var(--muted)}
+  .folk td:last-child{color:var(--cyan);font-family:var(--mono);font-size:.78rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* labs dropdown */
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  /* nav: fade state changes; the live CTA lights on hover and fades away on leave/click-away; no sticky touch-hover */
+  nav a,.labs-btn{transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a.cta{color:var(--cyan)}
+  @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
+  @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+  .labs-panel[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">boot it live</a>
+    <a href="#flow">the flow</a>
+    <a href="#detect">detection</a>
+  
+      <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html" class="cur">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+    </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 1 · defensive</div>
+    <h1>Boot persistence,<br>and how we <span class="cy">catch</span> it.</h1>
+    <p class="sub">A boot-stage foothold runs <em>before</em> the operating system — and before most of what defends it. That is exactly why defenders study it. This lab traces the mechanism with <b>non-operational markers</b>, then proves it can detect the change and roll it back. Nothing here installs, patches, or persists anything.</p>
+    <div class="banner">
+      <b>Ground rule for this lab:</b> we model the foothold as evidence, never as code. The runner writes <span class="mono">would_stage</span> / <span class="mono">would_hook</span> / <span class="mono">would_chain</span> strings — it does not stage, hook, or chain anything. Boot sectors, firmware, <code>bootmgr</code> and <code>winload</code> are never written.
+    </div>
+  </div>
+</div>
+
+<section id="where"><div class="wrap">
+  <div class="eyebrow">01 — the idea</div>
+  <h2>Where a foothold would live</h2>
+  <p class="lede">Every handoff in the boot chain is a place code can be swapped in to run first and survive a reboot. Knowing the locations is what lets you baseline and watch them — it is the map a defender needs.</p>
+  <div class="where">
+    <div class="loc"><span class="lab">MBR / VBR</span><span class="d">The first disk sectors on a legacy system. Bootstrap code runs before any OS loader — the oldest place persistence hides.</span></div>
+    <div class="loc"><span class="lab">ESP (.efi)</span><span class="d">On UEFI, the EFI System Partition holds boot applications. A rogue or modified <code>.efi</code> runs unless Secure Boot rejects its signature.</span></div>
+    <div class="loc"><span class="lab">BCD / boot entries</span><span class="d">The boot configuration decides what loads. Changing an entry can redirect the handoff without touching a binary.</span></div>
+    <div class="loc"><span class="lab">LaunchAgent / Daemon</span><span class="d">On macOS, a new launchd job or login item re-runs a program at every boot or login — the detection-lab's R6 watches exactly this.</span></div>
+  </div>
+  <p class="lede" style="margin-top:1rem">The common thread: it runs early, and it comes back. So a defender's job is to <b>know the baseline</b>, <b>detect the drift</b>, and <b>roll it back</b> — the three things the rest of this lab does.</p>
+</div></section>
+
+<section id="refuse"><div class="wrap">
+  <div class="eyebrow cy">02 — the safety contract</div>
+  <h2>What the lab refuses to do</h2>
+  <p class="lede">ChainLoader's charter is enforced in code and declared in its manifests. The "installer" is non-operational by construction — it emits evidence phases and a list of the actions it will <em>never</em> take.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">Prohibited actions <span class="mono" style="color:var(--faint);font-weight:400">(Mock-Installer-Manifest.yaml)</span></h3>
+      <ul class="refuse">
+        <li>disk-write</li><li>firmware-write</li><li>real-bootmgr-patch</li>
+        <li>real-winload-patch</li><li>persistent-installer</li><li>live-acpi-aml-modification</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">What a stage marker actually is</h3>
+      <p class="lede" style="font-size:.86rem">Each assembly "stage" returns a pointer to a constant string and nothing else — <span class="mono">allowed_side_effects: [memory-only-marker]</span>.</p>
+      <pre><span class="c">; the entire "MBR stage"</span>
+bks_mbr_stage_marker:
+    lea rax, <span class="s">"SIM-MBR-STAGE-MARKER-V1"</span>
+    ret   <span class="c">; returns a string. that's it.</span></pre>
+    </div>
+  </div>
+</div></section>
+
+<section id="flow"><div class="wrap">
+  <div class="eyebrow">03 — the processflow</div>
+  <h2>How the lab runs a scenario</h2>
+  <p class="lede">The same four preconditions every scenario declares, in order. Step through them — each shows the evidence the runner writes, not an action it takes.</p>
+
+  <div class="steps" id="steps"></div>
+  <div class="flowbox" id="flowbox"></div>
+  <div class="controls" style="margin-top:12px">
+    <button class="btn" id="nextBtn" onclick="nextStep()">next step →</button>
+    <button class="btn ghost" onclick="resetFlow()">restart</button>
+  </div>
+</div></section>
+
+<section id="detect"><div class="wrap">
+  <div class="eyebrow cy">04 — detection &amp; rollback</div>
+  <h2>Prove you caught it</h2>
+  <p class="lede">A <code>controlled-drift</code> run is the point of the exercise: it should fire the detections you expect, and a <code>recovery-validation</code> run should confirm the rollback. The verdict is a <em>process</em> result — the lab did its job — and the base image's hash is unchanged.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">Expected detections (drift)</h3>
+      <ul class="evtlist">
+        <li class="alert">detected: boot-entry-drift-alert</li>
+        <li class="alert">detected: bcd-integrity-drift-alert</li>
+        <li class="alert">detected: esp-file-drift-alert</li>
+        <li class="alert">detected: secure-boot-state-change-alert</li>
+      </ul>
+      <p class="lede" style="font-size:.82rem;margin-top:.6rem">On the SOC side, detection-lab rule <b>R6</b> fires on a new LaunchAgent/Daemon or login item that was not in the baseline.</p>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:.95rem">Evidence bundle</h3>
+      <pre><span class="k">"scenario_id"</span>: <span class="s">"win11-uefi-sb-off"</span>,
+<span class="k">"mode"</span>: <span class="s">"controlled-drift"</span>,
+<span class="k">"verdict"</span>: <span class="g">"PASS"</span>,
+<span class="k">"alerts"</span>: [
+  <span class="s">"detected:boot-entry-drift-alert"</span>,
+  <span class="s">"detected:esp-file-drift-alert"</span>
+],
+<span class="k">"rollback_confirmed"</span>: <span class="g">true</span>,
+<span class="k">"base_image"</span>: <span class="c">// hash identical pre/post</span></pre>
+    </div>
+  </div>
+  <p class="lede" style="margin-top:1rem"><b style="color:var(--fg)">The lesson:</b> you traced the mechanism, you fired the detections, and you confirmed the machine returned to its baseline — without ever arming the thing you were studying. That is the whole move.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">05 — go deeper</div>
+  <h2>In the repo</h2>
+  <p class="footlink lede">
+    <code>ChainLoader/MASTER.md</code> — the full teaching guide and safety boundary.<br>
+    <code>ChainLoader/bootkitstudio/manifests/Mock-Installer-Manifest.yaml</code> — the non-operational phases + prohibited actions.<br>
+    <code>ChainLoader/Risk-Register.yaml</code> — each boot-stage risk mapped to a defensive control.<br>
+    <code>ChainLoader/IR-Boot-Chain-Runbook.md</code> — triage, containment, recovery, closure for a real drift alert.
+  </p>
+</div></section>
+
+<footer><div class="wrap">Lab 1 · boot persistence · trace the mechanism, prove detection + rollback, never arm it</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var STEPS=[
+    {k:"snapshot-before",t:"Take a reversible snapshot",
+     body:"A qcow2 overlay is created over the VM image. The base is read-only backing — it cannot be modified. Nothing has 'happened' yet; this is the safety net that makes the rest reversible.",
+     evt:["<b>precondition</b> = snapshot-before","<b>overlay</b> created (base read-only)"]},
+    {k:"model the install",t:"Model the foothold as evidence",
+     body:"Instead of installing anything, the runner writes the four mock-installer phases. These are strings in the evidence bundle — a record of the shape of an installer, with no installer behind it.",
+     evt:["<b>mock_installer</b> = would_stage","<b>mock_installer</b> = would_hook","<b>mock_installer</b> = would_chain","<b>mock_installer</b> = would_restore"]},
+    {k:"boot & measure",t:"Boot the overlay and measure",
+     body:"The overlay boots headless with a timeout and no guest network. The lab measures stage markers and hashes — it watches the boot, it does not complete an attack.",
+     evt:["<b>stage</b> = SIM-UEFI-STAGE-MARKER-V1","<b>boot</b> = measured (overlay only)","<b>serial</b> log captured + hashed"]},
+    {k:"detect",t:"Fire the expected detections",
+     body:"The controlled-drift concept is compared against the baseline, and the detections that should fire, do. This is the signal a SOC would actually see.",
+     evt:["<b class='alert'>detected</b>: boot-entry-drift-alert","<b class='alert'>detected</b>: esp-file-drift-alert","<b class='alert'>detected</b>: secure-boot-state-change-alert"]},
+    {k:"rollback-after",t:"Roll back and confirm",
+     body:"The overlay is discarded and the base image is re-hashed. Identical hash = the machine is exactly as it started. The run passes because the lab did its job, not because anything was compromised.",
+     evt:["<b>precondition</b> = rollback-after","<b>overlay</b> discarded","<b>rollback_confirmed</b> = true","<b>verdict</b> = PASS"]}
+  ];
+  var cur=0, reached=0;
+  function render(){
+    var bar=document.getElementById("steps"); bar.innerHTML="";
+    STEPS.forEach(function(s,i){
+      var b=document.createElement("button");
+      b.setAttribute("aria-pressed", i===cur?"true":"false");
+      b.disabled = i>reached;
+      if(b.disabled) b.style.opacity=".45";
+      b.innerHTML='<span class="n">'+String(i+1).padStart(2,"0")+'</span>'+s.k;
+      b.onclick=function(){cur=i;render();};
+      bar.appendChild(b);
+    });
+    var s=STEPS[cur];
+    document.getElementById("flowbox").innerHTML=
+      '<span class="tag">step '+String(cur+1).padStart(2,"0")+' · '+s.k+'</span>'+
+      '<h3 style="margin:.3rem 0 .4rem">'+s.t+'</h3>'+
+      '<p style="color:var(--muted);margin:0 0 .4rem">'+s.body+'</p>'+
+      '<ul class="evtlist">'+s.evt.map(function(e){return '<li>'+e+'</li>';}).join("")+'</ul>';
+    document.getElementById("nextBtn").disabled = cur>=STEPS.length-1 && reached>=STEPS.length-1;
+  }
+  window.nextStep=function(){ if(cur<STEPS.length-1){cur++; if(cur>reached) reached=cur; render();} };
+  window.resetFlow=function(){ cur=0; reached=0; render(); };
+  render();
+})();
+</script>
+
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>
