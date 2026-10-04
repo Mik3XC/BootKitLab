@@ -21,7 +21,7 @@ the first instruction up.
 - **`ChainLoader/`** — defensive boot-chain integrity simulator (BootKitStudio): marker-only,
   guardrailed, QEMU snapshot/rollback, JSON evidence. Build: `cmake -S . -B build && cmake --build build`.
 - **`10biForthOS/`** — a Forth OS in a 512-byte boot sector, driven over serial. Build + run:
-  `make floppy && ./boot`, then `./send examples/simple.asm`.
+  `make floppy && ./boot`, then `./send examples/simple.asm` from `https://git.sr.ht/~hocwp/10biForthOS`
 
 ## Teaching tracks (next)
 
