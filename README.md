@@ -5,6 +5,8 @@ operating system does — firmware, boot sector, loader — is where the quietes
 This repo **measures** that ground instead of weaponizing it, and teaches how it works from
 the first instruction up.
 
+![Local HTTP Site](./4th10OS.png)
+
 ## Pages
 
 - **`index.html`** — an interactive walkthrough (the boot chain, the ChainLoader
