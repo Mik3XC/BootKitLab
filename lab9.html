@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 9 — PE / Mach-O Triage</title>
+<meta name="description" content="How a PE is built, and how binders, weaponized PDFs, fileless staging and worms show up in a file's own structure — read from the defender's side.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  /* PE map */
+  .pemap{display:grid;gap:5px;margin-top:6px}
+  .seg{border:1px solid var(--line);border-radius:9px;background:var(--panel-2);padding:10px 13px;cursor:pointer;transition:.16s;min-width:0}
+  .seg:hover{border-color:var(--cyan-dim);background:#0c1a1a}
+  .seg[aria-pressed=true]{border-color:var(--cyan);background:#0c1a1a}
+  .seg .rh{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;font-family:var(--mono)}
+  .seg .nm{font-size:.84rem;color:var(--fg);font-weight:600}
+  .seg .ad{font-size:.72rem;color:var(--faint)}
+  .seg .ab{font-size:.72rem;color:var(--amber);margin-top:3px;font-family:var(--mono)}
+  .seg.ov{border-style:dashed}
+  .detail{border:1px solid var(--cyan-dim);border-radius:10px;background:#0c1a1a;padding:13px;margin-top:10px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7;min-height:64px}
+  .detail b{color:var(--fg)} .detail .ab{color:var(--amber)}
+  /* triage */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .files{display:grid;gap:9px}
+  .file{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:11px 13px;min-width:0}
+  .file .fh{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .file .fn{font-family:var(--mono);font-size:.82rem;color:var(--fg);font-weight:600}
+  .file .kind{font-family:var(--mono);font-size:.7rem;color:var(--faint)}
+  .file .verdict{font-family:var(--mono);font-size:.7rem;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--faint);white-space:nowrap}
+  .file .ind{font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-top:6px;line-height:1.6}
+  .file.flag{border-color:var(--crit)} .file.flag .verdict{color:var(--crit);border-color:var(--crit);background:#2a1414}
+  .file.info{border-color:var(--amber-dim)} .file.info .verdict{color:var(--amber);border-color:var(--amber-dim)}
+  .file.clean{border-color:var(--cyan-dim)} .file.clean .verdict{color:var(--good);border-color:var(--cyan-dim)}
+  .file .ind .hit{color:var(--crit)} .file .ind .ok{color:var(--good)} .file .ind .q{color:var(--amber)}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:132px;color:var(--amber)}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html" class="cur">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 9 · detection engineering</div>
+    <h1>Reading the file for the <span class="cy">lie</span>.</h1>
+    <p class="sub">Lab 6 read a process in memory. This is the static complement: the file on disk, before it runs. A Portable Executable is a rigid, well-documented format — which is exactly why abuse leaves marks in it. Binders staple a second program on; weaponized documents carry a launcher; fileless loaders avoid the disk entirely; worms copy themselves with a tell. Each one shows up as a <em>structural anomaly</em>. Learn the anatomy, and the triage falls out of it.</p>
+    <div class="banner"><b>Recognition, not construction.</b> This lab teaches how these techniques <em>appear</em> to a defender — the indicators you triage on. It does not build a binder, a weaponized document, or a worm, and gives no payload. Anatomy and detection only.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the anatomy</div>
+  <h2>How a PE is built</h2>
+  <p class="lede">A PE is a stack of headers that tell the loader how to map the file into memory and where to start. Tap each region — it's where it sits, what it does, and the abuse surface a defender watches.</p>
+  <div class="pemap" id="pemap"></div>
+  <div class="detail" id="detail">Tap a region to inspect it.</div>
+  <div class="card" style="margin-top:14px">
+    <h3 style="font-family:var(--mono);font-size:.92rem">Mach-O, the macOS parallel</h3>
+    <p class="lede" style="font-size:.85rem">Same idea, different shape. A Mach-O opens with a magic number (often a <em>fat/universal</em> wrapper carrying arm64 + x86_64 slices), then <b>load commands</b> instead of a section table — <code>LC_SEGMENT_64</code> (<code>__TEXT</code> r-x, <code>__DATA</code> rw-), <code>LC_MAIN</code> (entry), <code>LC_LOAD_DYLIB</code> (imports), and <code>LC_CODE_SIGNATURE</code>. The abuse surface rhymes: an unsigned or ad-hoc-signed binary, a suspicious extra dylib load, or <code>DYLD_INSERT_LIBRARIES</code> injection are the Mach-O equivalents of the anomalies below.</p>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — triage the dropbox</div>
+  <h2>Six files, one scan</h2>
+  <p class="lede">A morning's worth of samples. Run static triage — it reads structure and metadata only (no execution) and flags each by its indicators. Note the installer: it carries the <em>same</em> big overlay a binder does, and is still benign. Structure raises the question; provenance answers it.</p>
+  <div class="controls">
+    <button class="btn" id="scanBtn" onclick="runTriage()">▶ run static triage</button>
+    <button class="btn ghost" onclick="resetTriage()">reset</button>
+  </div>
+  <div class="files" id="files"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the abuse surface, read defensively</div>
+  <h2>What each technique leaves behind</h2>
+  <div class="tbl">
+    <div class="r"><span class="lab">binders / joiners</span><span class="d">Staple a payload onto a carrier file. Tells: data past the last section's raw end (the <b>overlay</b>) that is large and high-entropy; a second <code>MZ</code>/PE embedded inside; a dropper that writes a child to <code>%TEMP%</code> and runs it; icon + double-extension spoof (<code>invoice.pdf.exe</code>). Overlays are also normal in installers — so you corroborate with signing and behavior, never convict on overlay alone.</span></div>
+    <div class="r"><span class="lab">PDF embedding</span><span class="d">A document that carries and launches code. You never execute it to check — you read the object tags. A tiny PDF with <code>/OpenAction</code> + <code>/JavaScript</code> + <code>/Launch</code> + <code>/EmbeddedFile</code> is a launcher wearing a document's clothes.</span></div>
+    <div class="r"><span class="lab">zero-transit / fileless</span><span class="d">Nothing crosses the disk to scan. The code is staged in memory — a script host reflectively loads a PE it downloaded or decoded in RAM. There's no file to triage, so the signal moves to the process and memory layers (Labs 4B &amp; 6): a private, unbacked executable region with no file ever written.</span></div>
+    <div class="r"><span class="lab">worms</span><span class="d">Self-propagation. Not a file shape but a <em>fan-out</em>: the same hash appearing on many hosts in minutes, bursts to SMB/RPC (445/135), copies written to shares and autostart. Lab 5's Blaster was a worm — this is that story at fleet scale, caught by rate and spread, not by one binary.</span></div>
+  </div>
+  <p class="lede" style="margin-top:1rem">The tools that read these without running anything:</p>
+  <pre><span class="c"># PE: overlay, sections, entropy, signature, imports — no execution</span>
+<span class="k">pefile</span> / PE-bear / CFF Explorer   <span class="c"># structure &amp; overlay size</span>
+<span class="k">sigcheck</span>                         <span class="c"># Authenticode: signed? valid? who?</span>
+<span class="k">capa</span> / DIE                         <span class="c"># capabilities &amp; packer ID from structure</span>
+
+<span class="c"># PDF: count the dangerous tags without opening it</span>
+<span class="k">pdfid</span> statement.pdf
+   /JavaScript 1   /OpenAction 1   /Launch 1   /EmbeddedFile 1   <span class="r">← launcher shape</span>
+
+<span class="c"># macOS</span>
+<span class="k">codesign</span> --verify --deep   ·   <span class="k">spctl</span> --assess   ·   otool -l / -L</pre>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>Structure lies both ways</h2>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Packing looks like malice — and isn't always.</b> A high-entropy section and an entry point into the last segment scream &ldquo;packed,&rdquo; but commercial software packs too (licensing, anti-piracy). Packing is a <em>question</em>, answered by what unpacks (Lab 6) and by reputation.</li>
+    <li><b style="color:var(--fg)">Overlays are legitimate.</b> Installers (NSIS, Inno), self-extracting archives, and signed updaters all append data. The binder tell isn't &ldquo;has overlay&rdquo; — it's overlay + unsigned + a second PE + dropper behavior, together.</li>
+    <li><b style="color:var(--fg)">Signatures get abused.</b> Stolen code-signing certs and signed-but-vulnerable loaders (bring-your-own-binary) mean &ldquo;signed&rdquo; is necessary, not sufficient. You check <em>who</em> signed it and whether that publisher belongs here.</li>
+    <li><b style="color:var(--fg)">Fileless leaves nothing to triage.</b> The whole point of zero-transit is to defeat this lab — which is why static triage is one layer, handing off to the memory and timeline labs when the disk comes up empty.</li>
+  </ul>
+  <p class="lede" style="margin-top:.6rem">Static triage is fast, safe, and scalable — the right first filter. It narrows thousands of files to the few worth detonating in a sandbox or confirming in memory. It never convicts alone.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">tools &amp; format</span>
+        <b>Microsoft PE/COFF specification</b> — the format of record.<br>
+        <b>pefile</b> (E. Carrera) · <b>pdfid</b> / <b>pdf-parser</b> (D. Stevens) · <b>capa</b> (Mandiant) · <b>Detect-It-Easy</b>.<br>
+        <b>Apple Mach-O</b> format &amp; <code>codesign</code>/<code>spctl</code>.<br>
+        this lab: <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">mapping</span>
+        <b>MITRE ATT&amp;CK</b> — Masquerading <code>T1036</code>, Embedded Payloads / binders, User Execution <code>T1204</code>, Reflective Loading <code>T1620</code>, Replication / worms.<br>
+        <span class="grp">the thread</span>
+        The weaponized PDF that drops the sled (Lab 8), that lands in RAM (Lab 6), beacons (Lab 4) and becomes the case (Lab 7). Lab 5's Blaster was the worm.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 10 — ROP / JOP: detecting the exploit that injects no code at all, flagged back in Lab 8.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 9 · PE / Mach-O triage · read the structure, corroborate with provenance, detonate only the few that survive · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  // ---- PE anatomy map ----
+  var MAP=[
+    {nm:"DOS header + stub",ad:"0x00 · MZ",ab:"abuse: 'This program cannot be run in DOS mode' stub can hide appended data",
+     dt:"Starts with <b>MZ</b> (0x4D5A). A tiny 16-bit stub that prints a message and exits, kept only for backward compatibility. <span class='ab'>Watch:</span> e_lfanew points to the real PE header; junk between the stub and PE, or an edited stub, is a cheap hiding spot."},
+    {nm:"PE signature",ad:'0x3C→ · "PE\\0\\0"',ab:"abuse: none directly — but its offset (e_lfanew) can be corrupted to confuse parsers",
+     dt:"The 4 bytes <b>50 45 00 00</b> mark the start of the real headers. Parsers that trust a malformed e_lfanew can be led to mis-read the file — a classic anti-analysis trick."},
+    {nm:"COFF file header",ad:"Machine · #Sections · TimeDateStamp",ab:"abuse: faked compile timestamp; odd section count",
+     dt:"Machine type (x86/x64), number of sections, and a build timestamp. <span class='ab'>Watch:</span> timestamps are trivially forged (or zeroed); a wildly future/epoch date or a section count that doesn't match the table is a flag."},
+    {nm:"Optional header",ad:"AddressOfEntryPoint · ImageBase · Subsystem · DataDirectories",ab:"abuse: entry point into a writable/last section = packer; empty Security dir = unsigned",
+     dt:"Despite the name, required. Holds the <b>entry point</b>, preferred load address, subsystem (GUI/console), and the data directories (imports, exports, resources, <b>Security</b> = Authenticode). <span class='ab'>Watch:</span> an entry point that lands in the last or a writable section screams unpacking stub; an empty Security directory means unsigned."},
+    {nm:"Section table",ad:".text · .data · .rsrc · .reloc",ab:"abuse: RWX section, high entropy (packed), name typos, raw size 0 / virtual large",
+     dt:"One row per section: name, virtual address/size, raw offset/size, and <b>characteristics</b> (R/W/X). <span class='ab'>Watch:</span> a section that is writable AND executable, a high-entropy section (packed/encrypted), misspelled standard names, or raw size 0 with a large virtual size (space carved for unpacking)."},
+    {nm:"Sections (body)",ad:"code + data + resources",ab:"abuse: shellcode in .rsrc; imports built by hash at runtime",
+     dt:"The mapped content. Imports normally list the DLLs/functions a program needs; malware often <b>resolves imports at runtime</b> (by hash) so the table looks suspiciously bare. Resources (<code>.rsrc</code>) can smuggle a second payload."},
+    {nm:"Overlay",ad:"after last raw section",ab:"abuse: binder/joiner payload, appended archive — ALSO legitimate in installers",
+     dt:"Any bytes <b>after the last section's raw data</b>. The loader doesn't map it — so it's a favorite place to staple a payload (binders), configs, or an archive. <span class='ab'>But</span> installers and signed updaters legitimately use overlays, so this is the most important <em>corroborate-don't-convict</em> region in the file.",ov:true}
+  ];
+  function renderMap(){
+    var h=document.getElementById("pemap");
+    h.innerHTML=MAP.map(function(m,i){
+      return '<div class="seg'+(m.ov?" ov":"")+'" role="button" aria-pressed="false" onclick="peSel('+i+')">'+
+        '<div class="rh"><span class="nm">'+m.nm+'</span><span class="ad">'+m.ad+'</span></div>'+
+        '<div class="ab">'+m.ab+'</div></div>';
+    }).join("");
+  }
+  window.peSel=function(i){
+    document.querySelectorAll('#pemap .seg').forEach(function(s,j){s.setAttribute('aria-pressed',j===i);});
+    document.getElementById("detail").innerHTML=MAP[i].dt;
+  };
+
+  // ---- static triage ----
+  var FILES=[
+    {fn:"calc.exe",kind:"PE32+ · signed",cls:"clean",v:"clean",
+     ind:"<span class='ok'>Authenticode valid (Microsoft Windows)</span> · imports normal · no overlay · entry in .text · no RWX section."},
+    {fn:"invoice.pdf.exe",kind:"PE32 · unsigned",cls:"flag",v:"binder / dropper",
+     ind:"<span class='hit'>double extension + PDF icon (masquerade)</span> · <span class='hit'>1.9 MB high-entropy overlay after last section</span> · <span class='hit'>second embedded MZ</span> · writes child to %TEMP% and runs it. (T1036 / T1204)"},
+    {fn:"statement.pdf",kind:"PDF document",cls:"flag",v:"weaponized document",
+     ind:"pdfid: <span class='hit'>/OpenAction 1 · /JavaScript 1 · /Launch 1 · /EmbeddedFile 1</span> · 3-page shell wrapping a launcher. Never opened — read by tags."},
+    {fn:"(no file written)",kind:"powershell → in-memory",cls:"flag",v:"zero-transit / fileless",
+     ind:"<span class='hit'>no file on disk to triage</span> · parent powershell.exe reflectively loads a PE decoded in RAM → handoff to memory layer: private unbacked RWX region (Lab 6). (T1620)"},
+    {fn:"update_svc.exe",kind:"PE32 · unsigned",cls:"flag",v:"worm / self-propagation",
+     ind:"<span class='hit'>same SHA-256 seen on 23 hosts in 4 min</span> · bursts to 445/135 · copies self to admin shares + Run key. Shape is the fan-out, not the binary (cf. Lab 5)."},
+    {fn:"setup_app_7.2.exe",kind:"PE32 · signed NSIS",cls:"info",v:"installer · tune",
+     ind:"<span class='q'>42 MB high-entropy overlay</span> — same shape as a binder — <span class='ok'>but signed NSIS installer from a known publisher</span>. Overlay is the archive. Corroborated benign; the false-positive teacher."}
+  ];
+  function renderFiles(scan){
+    document.getElementById("files").innerHTML=FILES.map(function(f){
+      var cls="file"+(scan?(" "+f.cls):""), v=scan?('<span class="verdict">'+f.v+'</span>'):'<span class="verdict">not scored</span>';
+      return '<div class="'+cls+'"><div class="fh"><span class="fn">'+f.fn+'</span><span class="kind">'+f.kind+'</span>'+v+'</div>'+
+        (scan?'<div class="ind">'+f.ind+'</div>':'')+'</div>';
+    }).join("");
+  }
+  window.resetTriage=function(){ renderFiles(false); };
+  window.runTriage=function(){ renderFiles(true); };
+
+  renderMap(); peSel(0); renderFiles(false);
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

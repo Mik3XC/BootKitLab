@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gitche Mode</title>
+<meta name="description" content="Level 9 · Gitche Mode — a cinematic glitch terminal and hex-editor sequence. Theater, not tooling. Ends where every movie hacker ends: whoami ▸ root.">
+<style>
+  :root{
+    --bg:#04080a;--fg:#8fe88f;--dim:#2f7a3f;--amber:#e8a13a;--cyan:#43c0b8;--crit:#e05c5c;--faint:#2a4a34;
+    --mono:ui-monospace,"SF Mono","IBM Plex Mono",Menlo,Consolas,monospace;
+    --gi:0; /* glitch intensity 0..1, set by JS */
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:var(--mono);overflow:hidden;position:relative}
+  /* layers */
+  #rain{position:fixed;inset:0;z-index:0;opacity:.12}
+  #noise{position:fixed;inset:0;z-index:3;pointer-events:none;mix-blend-mode:screen;opacity:.08}
+  #vglitch{position:fixed;inset:0;z-index:3;pointer-events:none;mix-blend-mode:screen;opacity:.7}
+  #tears{position:fixed;inset:0;z-index:4;pointer-events:none;overflow:hidden}
+  #tears .tear{position:absolute;left:0;right:0;height:14px;mix-blend-mode:screen;opacity:0;
+    background:linear-gradient(90deg,rgba(67,192,184,.5),rgba(232,161,58,.4),rgba(224,92,92,.4));filter:blur(.3px)}
+  #blocks{position:fixed;inset:0;z-index:4;pointer-events:none}
+  #blocks div{position:absolute;mix-blend-mode:screen}
+  .scan{position:fixed;inset:0;z-index:5;pointer-events:none;
+    background:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.18) 3px,rgba(0,0,0,0) 4px)}
+  .roll{position:fixed;left:0;right:0;height:120px;z-index:5;pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,255,255,0),rgba(143,232,143,.06) 50%,rgba(255,255,255,0));animation:roll 7s linear infinite}
+  @keyframes roll{0%{top:-120px}100%{top:100%}}
+  .vig{position:fixed;inset:0;z-index:5;pointer-events:none;box-shadow:inset 0 0 180px 40px rgba(0,0,0,.85)}
+  .wrap{position:relative;z-index:1;height:100%;display:grid;grid-template-rows:auto 1fr auto;padding:14px;gap:10px;max-width:1100px;margin:0 auto}
+  body.gshake .wrap{animation:shake .18s infinite}
+  @keyframes shake{0%{transform:translate(0,0)}25%{transform:translate(calc(var(--gi)*-3px),calc(var(--gi)*2px)) skewX(calc(var(--gi)*-0.4deg))}50%{transform:translate(calc(var(--gi)*2px),calc(var(--gi)*-2px))}75%{transform:translate(calc(var(--gi)*-2px),0) skewX(calc(var(--gi)*0.3deg))}100%{transform:translate(0,0)}}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:.72rem;color:var(--dim);letter-spacing:.14em;text-transform:uppercase}
+  .top b{color:var(--amber)}
+  .lvlbar{flex:1;min-width:120px;height:8px;border:1px solid var(--faint);border-radius:99px;overflow:hidden;background:#061008}
+  .lvlbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--dim),var(--fg),var(--amber));transition:width .25s}
+  .panes{display:grid;grid-template-rows:1fr auto;gap:10px;min-height:0}
+  @media(min-width:760px){.panes{grid-template-rows:none;grid-template-columns:1.25fr 1fr}}
+  .term,.hex{border:1px solid var(--faint);border-radius:8px;background:rgba(4,12,8,.72);padding:12px;overflow:auto;min-height:0;text-shadow:0 0 6px rgba(120,230,120,.35);position:relative}
+  /* chromatic aberration burst */
+  .aberr{animation:aberr .14s steps(2) 2}
+  @keyframes aberr{0%{text-shadow:-3px 0 var(--crit),3px 0 var(--cyan),0 0 6px rgba(120,230,120,.4);transform:translateX(-1px)}50%{text-shadow:3px 0 var(--crit),-3px 0 var(--cyan),0 0 6px rgba(120,230,120,.4);transform:translateX(1px)}100%{text-shadow:0 0 6px rgba(120,230,120,.35);transform:none}}
+  .term{font-size:.84rem;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .term .c{color:var(--cyan)} .term .o{color:var(--fg)} .term .s{color:var(--amber)} .term .r{color:var(--crit)} .term .d{color:var(--dim)}
+  .cur{display:inline-block;width:8px;height:1.05em;background:var(--fg);vertical-align:-2px;animation:bl 1s step-end infinite}
+  @keyframes bl{50%{opacity:0}}
+  .hex{font-size:.72rem;line-height:1.55}
+  .hex .hl{color:var(--dim);margin-bottom:6px;letter-spacing:.1em;text-transform:uppercase}
+  .hr{white-space:pre}
+  .hr .off{color:var(--dim)} .hr b{font-weight:400}
+  .hr b.edit{color:var(--amber);background:#2a2008;border-radius:2px}
+  .hr b.done{color:var(--cyan)}
+  .bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:.7rem;color:var(--dim)}
+  .btn{font-family:var(--mono);font-size:.78rem;cursor:pointer;border-radius:7px;padding:7px 13px;background:transparent;color:var(--fg);border:1px solid var(--dim)}
+  .btn:hover{border-color:var(--fg);box-shadow:0 0 10px rgba(120,230,120,.3)}
+  a{color:var(--cyan)}
+  /* finale */
+  #fin{position:fixed;inset:0;z-index:7;display:none;align-items:center;justify-content:center;flex-direction:column;
+    background:radial-gradient(circle at 50% 50%,rgba(4,20,10,.92),rgba(2,6,4,.98));text-align:center;padding:20px}
+  #fin.show{display:flex}
+  #fin .big{font-size:clamp(2rem,9vw,5rem);font-weight:700;letter-spacing:.04em;color:var(--fg);line-height:1;position:relative}
+  #fin .big .arw{color:var(--amber)} #fin .big .rt{color:var(--amber)}
+  #fin .big{animation:finglitch 2.4s infinite}
+  @keyframes finglitch{0%,100%{text-shadow:0 0 14px rgba(232,161,58,.5);transform:none;clip-path:none}
+    42%{text-shadow:0 0 14px rgba(232,161,58,.5)}
+    44%{text-shadow:-5px 0 var(--crit),5px 0 var(--cyan);transform:translateX(-4px) skewX(-6deg)}
+    46%{text-shadow:5px 0 var(--crit),-5px 0 var(--cyan);transform:translateX(4px) skewX(6deg);clip-path:inset(20% 0 30% 0)}
+    48%{transform:none;clip-path:none;text-shadow:0 0 14px rgba(232,161,58,.5)}
+    70%{clip-path:inset(60% 0 10% 0);transform:translateX(3px)}72%{clip-path:none;transform:none}}
+  #fin .gr{margin-top:14px;font-size:.9rem;color:var(--fg);letter-spacing:.3em}
+  #fin .tag{margin-top:22px;font-size:.72rem;color:var(--dim);letter-spacing:.1em;max-width:40ch}
+  #fin a{color:var(--cyan)}
+  #flash{position:fixed;inset:0;z-index:8;background:#dfffdf;opacity:0;pointer-events:none;mix-blend-mode:difference}
+  @media(prefers-reduced-motion:reduce){
+    .cur,#fin .big,.roll{animation:none}
+    body.gshake .wrap{animation:none}
+    #noise,#vglitch,#tears,#blocks{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="rain"></canvas>
+<canvas id="noise"></canvas>
+<svg id="vglitch" preserveAspectRatio="none"></svg>
+<div id="tears"><div class="tear"></div><div class="tear"></div><div class="tear"></div></div>
+<div id="blocks"></div>
+<div class="roll"></div>
+<div class="scan"></div><div class="vig"></div>
+<div id="flash"></div>
+<div class="wrap">
+  <div class="top">
+    <span>LVL <b id="lvlnum">0</b> · GITCHE MODE · <span style="color:var(--amber)">shining-big-sea-water protocol</span></span>
+    <span class="lvlbar"><i id="lvlfill"></i></span>
+    <span id="clock">--:--:--</span>
+  </div>
+  <div class="panes">
+    <div class="term" id="term"></div>
+    <div class="hex">
+      <div class="hl">hex editor · /dev/vigil &nbsp;<span style="color:var(--faint)">(markers, not payload — cinema)</span></div>
+      <div id="hexbody"></div>
+    </div>
+  </div>
+  <div class="bottom">
+    <span>cinematic simulation · no systems were harmed · measure, don't weaponize</span>
+    <span><button class="btn" id="replay" onclick="run()">▶ run sequence</button> &nbsp; <a href="live.html">← back</a></span>
+  </div>
+</div>
+
+<div id="fin">
+  <div class="big">WHOAMI <span class="arw">▸</span> <span class="rt">ROOT</span></div>
+  <div class="gr">ACCESS&nbsp;GRANTED</div>
+  <div class="tag">…it's a movie. Theater, not tooling — the only thing rooted here is the aesthetic. <a href="index.html">exit to the lab</a></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var term=document.getElementById("term");
+  var GI=0; // glitch intensity 0..1
+  function setGI(v){ GI=Math.max(0,Math.min(1,v)); document.documentElement.style.setProperty("--gi",GI.toFixed(2));
+    document.body.classList.toggle("gshake", !reduce && GI>0.55); }
+
+  // ---- matrix rain (bg) ----
+  (function rain(){
+    var c=document.getElementById("rain"), x=c.getContext("2d"), W,H,cols,drops,glyph="01ｱｲｳｴｵｶｷｸ3XC<>/\\|=+*".split("");
+    function size(){ W=c.width=innerWidth; H=c.height=innerHeight; cols=Math.floor(W/14); drops=new Array(cols).fill(0).map(function(){return Math.random()*-50;}); }
+    size(); addEventListener("resize",size);
+    function tick(){ x.fillStyle="rgba(4,8,10,.22)"; x.fillRect(0,0,W,H); x.fillStyle="#3f9f5f"; x.font="13px monospace";
+      for(var i=0;i<cols;i++){ var ch=glyph[Math.floor(Math.random()*glyph.length)]; x.fillText(ch,i*14,drops[i]*14); drops[i]++; if(drops[i]*14>H && Math.random()>0.975) drops[i]=Math.random()*-20; }
+      requestAnimationFrame(tick); }
+    if(!reduce) tick();
+  })();
+
+  // ---- TV static noise (fuzzing) ----
+  (function noise(){
+    if(reduce){ return; }
+    var c=document.getElementById("noise"), x=c.getContext("2d"), NW=180,NH=110;
+    c.width=NW; c.height=NH;
+    function size(){ c.style.width=innerWidth+"px"; c.style.height=innerHeight+"px"; }
+    size(); addEventListener("resize",size);
+    function tick(){
+      var img=x.createImageData(NW,NH), d=img.data;
+      for(var i=0;i<d.length;i+=4){ var v=Math.random()*255; d[i]=v*0.6; d[i+1]=v; d[i+2]=v*0.7; d[i+3]=Math.random()<(0.25+GI*0.55)?255:0; }
+      x.putImageData(img,0,0);
+      c.style.opacity=(0.04+GI*0.18+(Math.random()<GI*0.25?Math.random()*0.3:0)).toFixed(3);
+      setTimeout(function(){requestAnimationFrame(tick);}, 55);
+    }
+    tick();
+  })();
+
+  // ---- vector glitch (animated wireframes) ----
+  (function vgl(){
+    if(reduce) return;
+    var svg=document.getElementById("vglitch"), W,H;
+    function size(){ W=innerWidth;H=innerHeight; svg.setAttribute("viewBox","0 0 "+W+" "+H); svg.setAttribute("width",W); svg.setAttribute("height",H); }
+    size(); addEventListener("resize",size);
+    var cols=["#43c0b8","#e8a13a","#e05c5c","#8fe88f"];
+    function tick(){
+      var n=Math.floor(GI*6), s="";
+      for(var k=0;k<n;k++){
+        var col=cols[k%cols.length], o=(0.25+Math.random()*0.5*GI).toFixed(2);
+        if(Math.random()<0.5){ // jittering polyline
+          var y=Math.random()*H, pts="", px=0;
+          while(px<W){ pts+=px+","+(y+(Math.random()-0.5)*40*GI)+" "; px+=W/12; }
+          s+='<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="'+(1+Math.random()*1.5)+'" opacity="'+o+'"/>';
+        } else { // wireframe triangle
+          var cx=Math.random()*W, cy=Math.random()*H, r=20+Math.random()*120*GI;
+          s+='<polygon points="'+cx+','+(cy-r)+' '+(cx+r)+','+(cy+r)+' '+(cx-r)+','+(cy+r)+'" fill="none" stroke="'+col+'" stroke-width="1" opacity="'+o+'" transform="skewX('+((Math.random()-0.5)*30*GI).toFixed(1)+')"/>';
+        }
+      }
+      svg.innerHTML=s;
+      setTimeout(tick, 110);
+    }
+    tick();
+  })();
+
+  // ---- horizontal tear / datamosh bars ----
+  (function tears(){
+    if(reduce) return;
+    var bars=document.querySelectorAll("#tears .tear");
+    function tick(){
+      bars.forEach(function(b){
+        if(Math.random()<0.4+GI*0.5){
+          b.style.top=(Math.random()*100)+"%";
+          b.style.height=(6+Math.random()*26*GI)+"px";
+          b.style.transform="translateX("+((Math.random()-0.5)*120*GI)+"px)";
+          b.style.opacity=(0.2+Math.random()*0.6*GI).toFixed(2);
+        } else b.style.opacity="0";
+      });
+      setTimeout(tick, 80+Math.random()*90);
+    }
+    tick();
+  })();
+
+  // ---- glitch block bursts ----
+  var blocks=document.getElementById("blocks");
+  function burst(){
+    if(reduce) return;
+    var cols=["rgba(67,192,184,.5)","rgba(232,161,58,.45)","rgba(224,92,92,.45)","rgba(143,232,143,.4)"];
+    var n=Math.floor(1+GI*5);
+    for(var i=0;i<n;i++){
+      var d=document.createElement("div");
+      d.style.left=(Math.random()*100)+"%"; d.style.top=(Math.random()*100)+"%";
+      d.style.width=(10+Math.random()*180*GI)+"px"; d.style.height=(4+Math.random()*16)+"px";
+      d.style.background=cols[Math.floor(Math.random()*cols.length)];
+      blocks.appendChild(d);
+      (function(el){ setTimeout(function(){ el.remove(); }, 70+Math.random()*160); })(d);
+    }
+  }
+  (function burstloop(){ if(!reduce){ if(Math.random()<0.3+GI*0.6) burst(); } setTimeout(burstloop, 180+Math.random()*220); })();
+
+  // ---- chromatic aberration bursts on panes ----
+  function aberr(){ if(reduce) return; ["term","hex"].forEach(function(sel){ var el=sel==="term"?term:document.querySelector(".hex"); el.classList.remove("aberr"); void el.offsetWidth; el.classList.add("aberr"); }); }
+  (function aberrloop(){ if(!reduce && Math.random()<GI*0.5) aberr(); setTimeout(aberrloop, 300+Math.random()*400); })();
+
+  // ---- clock ----
+  setInterval(function(){ document.getElementById("clock").textContent=new Date().toTimeString().slice(0,8); },1000);
+
+  // ---- hex editor ----
+  var ROWS=13, hex=[], doneMap={};
+  function rnd(){ return Math.floor(Math.random()*256); }
+  function buildHex(){ hex=[]; for(var r=0;r<ROWS;r++){ var row=[]; for(var i=0;i<16;i++) row.push(rnd()); hex.push(row); } renderHex(); }
+  function hx(n){ return ("0"+(n&0xff).toString(16)).slice(-2); }
+  function renderHex(edit){
+    var body=document.getElementById("hexbody"), html="";
+    for(var r=0;r<ROWS;r++){
+      var off="0x"+("0000"+(r*16+0x7e00).toString(16)).slice(-5), cells="", asc="";
+      for(var i=0;i<16;i++){ var v=hex[r][i], cls="";
+        if(edit && edit.r===r && edit.i===i) cls=' class="edit"';
+        else if(doneMap[r+":"+i]) cls=' class="done"';
+        cells+='<b'+cls+'>'+hx(v)+'</b> '; asc+=(v>=0x20&&v<0x7f)?String.fromCharCode(v):"."; }
+      html+='<div class="hr"><span class="off">'+off+'</span>  '+cells+' '+asc+'</div>';
+    }
+    body.innerHTML=html;
+  }
+  function editByte(cb){ var r=Math.floor(Math.random()*ROWS), i=Math.floor(Math.random()*16);
+    renderHex({r:r,i:i}); setTimeout(function(){ hex[r][i]=rnd(); doneMap[r+":"+i]=1; renderHex(); if(cb)cb(); }, reduce?0:90); }
+
+  // ---- terminal typing ----
+  function line(html){ term.innerHTML+=html+"\n"; term.scrollTop=term.scrollHeight; }
+  function typeCmd(txt,cb){
+    var span=document.createElement("span"); span.innerHTML='<span class="c">root@gitche</span>:<span class="d">~#</span> <span class="o"></span>';
+    term.appendChild(span); var out=span.querySelector(".o"), cur=document.createElement("span"); cur.className="cur"; span.appendChild(cur); var i=0;
+    (function t(){ if(i>=txt.length){ cur.remove(); term.innerHTML+="\n"; term.scrollTop=term.scrollHeight; if(cb)cb(); return; }
+      out.textContent+=txt[i++]; term.scrollTop=term.scrollHeight; if(!reduce&&Math.random()<GI*0.25) aberr(); setTimeout(t, reduce?0:(26+Math.random()*40)); })();
+  }
+  function setLevel(n){ document.getElementById("lvlnum").textContent=n; document.getElementById("lvlfill").style.width=(n/9*100)+"%";
+    var target=Math.pow(n/9,0.85); // ease
+    setGI(target); }
+
+  // ---- the script ----
+  var busy=false;
+  var SEQ=[
+    {cmd:"gitche --mode=9 --vigil --follow-rabbit"},
+    {out:'<span class="d">[gitche] shining-big-sea-water protocol engaged</span>'},
+    {out:'<span class="d">[gitche] by the shores of Gitche Gumee… the deep, dark water</span>'},
+    {lvl:1,hex:3},
+    {cmd:"map --surface --passive"},
+    {out:'<span class="o">enumerating… </span><span class="s">1024</span><span class="o"> nodes · </span><span class="s">7</span><span class="o"> veils · 1 door</span>',lvl:2,hex:3},
+    {cmd:"open /dev/vigil -o hex"},
+    {out:'<span class="d">attaching hex editor to the marker region…</span>',lvl:3,hex:4},
+    {cmd:"patch --marker 0x7e00 --measure-only"},
+    {out:'<span class="o">writing </span><span class="s">markers</span><span class="o"> (not payload — this is cinema)…</span>',lvl:4,hex:6},
+    {cmd:"xor --key neo | lodsb | int 0x14"},
+    {out:'<span class="d">…the white rabbit answers over the wire…</span>',lvl:5,hex:5},
+    {cmd:"bypass --theater --no-really"},
+    {out:'<span class="s">[####################] veil lifted</span>',lvl:6,hex:5},
+    {cmd:"escalate --lantern --rotate"},
+    {out:'<span class="o">lantern passed · vigil holds · </span><span class="s">ring 0</span>',lvl:7,hex:4},
+    {cmd:"knock knock, neo"},
+    {out:'<span class="d">who is there.</span>',lvl:8,hex:3},
+    {cmd:"whoami > root"},
+    {out:'<span class="r">root</span>',lvl:9,hex:2,fin:true}
+  ];
+  function step(k){
+    if(k>=SEQ.length){ busy=false; return; }
+    var s=SEQ[k];
+    function after(){
+      if(s.lvl) setLevel(s.lvl);
+      if(!reduce) aberr();
+      var n=s.hex||0, i=0;
+      (function edits(){ if(i++>=n){ next(); return; } editByte(edits); })();
+      function next(){
+        if(s.fin){ finale(); return; }
+        setTimeout(function(){ step(k+1); }, reduce?0:240);
+      }
+    }
+    if(s.cmd) typeCmd(s.cmd, after); else { line(s.out||""); after(); }
+  }
+  function finale(){
+    setGI(1);
+    if(!reduce){ // flash burst
+      var f=document.getElementById("flash"); var fl=0;
+      var iv=setInterval(function(){ f.style.opacity=(fl%2?0:0.7); fl++; if(fl>5){ clearInterval(iv); f.style.opacity=0; } },60);
+      for(var i=0;i<24;i++) setTimeout(burst,i*40);
+    }
+    setTimeout(function(){ document.getElementById("fin").classList.add("show"); busy=false; }, reduce?0:520);
+  }
+
+  window.run=function(){
+    if(busy) return; busy=true;
+    document.getElementById("fin").classList.remove("show");
+    term.innerHTML=""; doneMap={}; setLevel(0); setGI(reduce?0:0.12); buildHex();
+    line('<span class="d">GITCHE MODE // level 9 // 3XC // cinematic</span>');
+    setTimeout(function(){ step(0); }, reduce?0:400);
+  };
+  buildHex(); run();
+})();
+</script>
+</body>
+</html>

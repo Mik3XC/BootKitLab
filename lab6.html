@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 6 — Memory Forensics</title>
+<meta name="description" content="Find what a disk scan can't: injected code, hidden processes and hooks in a memory image — the one place an implant has to become real.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:132px;color:var(--amber)}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .4rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  /* VAD region rows */
+  .regions{display:grid;gap:8px;margin-top:4px}
+  .reg{display:grid;grid-template-columns:1fr auto;gap:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:10px 12px;min-width:0}
+  .reg .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-family:var(--mono);font-size:.8rem;min-width:0}
+  .reg .proc{color:var(--fg);font-weight:600} .reg .pid{color:var(--faint);font-size:.74rem}
+  .reg .addr{color:var(--muted);font-size:.76rem}
+  .reg .prot{font-family:var(--mono);font-size:.7rem;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--muted)}
+  .reg .prot.x{color:var(--amber);border-color:var(--amber-dim)}
+  .reg .prot.rwx{color:var(--crit);border-color:var(--crit)}
+  .reg .sig{grid-column:1/-1;font-family:var(--mono);font-size:.74rem;color:var(--faint);word-break:break-word}
+  .reg .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;align-self:center;white-space:nowrap}
+  .reg.flag{border-color:var(--crit)} .reg.flag .tag{color:var(--crit)}
+  .reg.info{border-color:var(--amber-dim)} .reg.info .tag{color:var(--amber)}
+  .reg.clean .tag{color:var(--good)}
+  .reg .tag.pending{color:var(--faint)}
+  .verdict{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;margin-top:12px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7}
+  .verdict .crit{color:var(--crit)} .verdict .warn{color:var(--amber)} .verdict .ok{color:var(--good)}
+  .verdict .big{font-weight:600;font-size:.9rem}
+  /* cross-view mini */
+  .xv{display:grid;gap:12px;margin-top:.4rem}
+  @media(min-width:620px){.xv{grid-template-columns:1fr 1fr}}
+  .xv .col{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;min-width:0}
+  .xv h4{margin:0 0 8px;font-family:var(--mono);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .xv .p{font-family:var(--mono);font-size:.78rem;padding:4px 8px;border-radius:6px;display:flex;justify-content:space-between;gap:8px;border:1px solid transparent}
+  .xv .p .pd{color:var(--faint)}
+  .xv .p.hid{background:#2a1414;border-color:var(--crit);color:var(--crit)}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html" class="cur">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 6 · detection engineering · capstone</div>
+    <h1>Where it has to be <span class="cy">real</span>.</h1>
+    <p class="sub">Disk can be empty or lying. The network only carries ciphertext. But to <em>run</em>, code must exist — decrypted, unpacked, resolved — in RAM. That is the one place an implant cannot hide and still execute. Lab 5's sled landed somewhere; this is where you go find it. Memory forensics is reading that snapshot and asking: what's executing here that nothing on disk accounts for?</p>
+    <div class="banner"><b>Analysis only.</b> Everything here reads a captured memory <em>image</em> — a read-only artifact. No code is injected, no process is touched, nothing is written back. This is the microscope, not the scalpel.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — why memory</div>
+  <h2>The place that can't lie</h2>
+  <p class="lede">Every trick from the earlier labs converges here. A fileless implant never touches disk — but it's a running thread, so it's in RAM. A packed payload is gibberish on disk and plaintext in memory once it unpacks to run. The call-table hooks from Lab 2 are pointers in live kernel structures. The hidden process from Lab 3 still has an <code>EPROCESS</code> object the allocator knows about. The NOP sled from Lab 5 is a committed, executable region somewhere in a victim's address space.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">injected code</span><span class="d">Memory a process is executing that is <em>private</em> (not shared) and <em>not backed by a file on disk</em>. Legitimate executable code is nearly always a mapped image. Private + executable + no backing file is the classic shape of injection.</span></div>
+    <div class="r"><span class="lab">hidden processes</span><span class="d">Unlinking an <code>EPROCESS</code> from the list hides it from <code>pslist</code> — but the object still carries its pool tag, so scanning the pool finds it anyway. Lab 3's cross-view, done against the image.</span></div>
+    <div class="r"><span class="lab">hooks &amp; callbacks</span><span class="d">SSDT / IDT / IRP tables and notify-routine arrays live in kernel memory. Resolve each pointer against the module that owns that address — a pointer into unbacked or unexpected memory is the hook from Lab 2.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — run malfind</div>
+  <h2>Hunt injected code by its shape</h2>
+  <p class="lede">The canonical technique (Volatility's <code>malfind</code>): walk every process's committed memory regions (its VAD tree) and flag the ones that are <b>executable</b>, <b>private</b>, and have <b>no backing file</b> — then look at the first bytes. An <code>MZ</code> header or a run of <code>0x90</code> in a region like that has no innocent explanation. Run the scan on this sample image:</p>
+  <div class="controls">
+    <button class="btn" id="scanBtn" onclick="runMalfind()">▶ run malfind</button>
+    <button class="btn ghost" onclick="resetScan()">reset</button>
+  </div>
+  <div class="regions" id="regions"></div>
+  <div class="verdict" id="verdict">Run malfind to classify each region.</div>
+  <p class="mono" style="font-size:.72rem;color:var(--faint);margin-top:9px">rule: executable &amp; private &amp; unbacked → injection candidate; inspect first bytes. Mapped-image code is cleared. A known JIT engine is <em>flagged for tuning</em>, not convicted — see §04.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the process that isn't there</div>
+  <h2>pslist vs psscan, in the image</h2>
+  <p class="lede">The same move as Lab 3, one layer down. <code>pslist</code> walks the doubly-linked list the OS maintains — the convenient view, and the one a rootkit unlinks itself from. <code>psscan</code> ignores the list and scans the memory pool for anything carrying the <code>Proc</code> pool tag. A process present in the scan but absent from the list unlinked itself.</p>
+  <div class="xv">
+    <div class="col"><h4>pslist · linked list</h4><div id="pslist"></div></div>
+    <div class="col"><h4>psscan · pool-tag scan</h4><div id="psscan"></div></div>
+  </div>
+  <p class="lede" style="margin-top:.8rem">Here <code>psscan</code> turns up a <code>svch0st.exe</code> (pid 6620) the list never mentions — hollowed and unlinked. On its own that's a question, not a conviction: the pool can also hold a process that exited mid-capture. The answer is corroboration — does it also own injected memory (§02) or an outbound socket? Convictions are built from agreeing evidence, never one view.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>A snapshot of a moving target</h2>
+  <p class="lede">Memory forensics is powerful and full of ways to fool yourself. The discipline is knowing them:</p>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Legitimate RWX exists.</b> JIT engines (.NET, V8/Node, Java) and some browsers genuinely allocate private executable memory and write code into it. A naive &ldquo;private RWX = evil&rdquo; rule lights them up. You baseline the known JIT processes and alert on the rest — the same allowlist-then-subtract logic as Lab 4.</li>
+    <li><b style="color:var(--fg)">Acquisition is not atomic.</b> Imaging a live machine takes time, and memory changes while you read it — <em>page smear</em> leaves structures half-updated and inconsistent. A clean snapshot comes from a VM (pause and copy) or a hardware/crash-dump path; a live grab is evidence with an asterisk.</li>
+    <li><b style="color:var(--fg)">Anti-forensics is real.</b> Malware can unlink, overwrite pool tags, encrypt its own regions until use, or run only inside a legitimately-RWX host. Each technique defeats one method — which is exactly why you run several and compare, never trust one plugin's output as the verdict.</li>
+    <li><b style="color:var(--fg)">It's a single frame.</b> The image is one instant. Beaconing (Lab 4), persistence (Lab 1) and timeline live in continuous telemetry; memory confirms the <em>what</em> at a moment, your logs carry the <em>when</em> and <em>how often</em>.</li>
+  </ul>
+  <p class="lede" style="margin-top:.6rem"><b style="color:var(--fg)">On this Mac.</b> Full memory imaging is harder on modern macOS (SIP, Apple-silicon protections) than the Windows tooling assumes. The lab's practical analog is live endpoint telemetry — <code>osquery</code> process/open-handle tables and <code>eslogger</code> events — which captures the same facts (unbacked executable mappings, process lineage) continuously, without a raw dump. The <em>principle</em> is OS-agnostic; the acquisition path differs.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">technique &amp; tooling</span>
+        <b>Volatility 3</b> — Volatility Foundation. The reference open-source memory-forensics framework; <code>windows.malfind</code>, <code>windows.pslist</code>, <code>windows.psscan</code>, <code>windows.ssdt</code>.<br>
+        <a href="https://github.com/volatilityfoundation/volatility3" target="_blank" rel="noopener">github.com/volatilityfoundation/volatility3</a><br>
+        <b>A. Schuster</b> (2006), &ldquo;Searching for Processes and Threads in Microsoft Windows Memory Dumps,&rdquo; <em>DFRWS</em> — pool-tag scanning, the basis of <code>psscan</code>.
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">reference &amp; mapping</span>
+        <b>Ligh, Case, Levy &amp; Walters</b> (2014), <em>The Art of Memory Forensics</em>, Wiley — the standard text.<br>
+        <b>MITRE ATT&amp;CK</b> — Process Injection <code>T1055</code>; Reflective / fileless execution.<br>
+        <span class="grp">this lab</span>
+        Closes the arc: the sled from <a href="lab5.html">Lab 5</a>, the cross-view from <a href="lab3.html">Lab 3</a>, the hooks from <a href="lab2.html">Lab 2</a> — all found again in RAM. macOS analog: <code>osquery</code> + <code>eslogger</code> in <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">BlueTeamLab</a>.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">That's the chain, end to end:</b> from the first instruction at <code>0x7c00</code> to the injected page in RAM — seven ways to measure the ground an attacker stands on, without ever standing on it yourself.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 6 · memory forensics · read the image, never write it · the one place code must be real to run</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  // sample memory image: committed regions across processes
+  var REGS=[
+    {proc:"explorer.exe",pid:1012,addr:"0x7ff6a2100000",prot:"R-X",priv:false,file:"explorer.exe",sig:"PE (mapped image, signed)"},
+    {proc:"svchost.exe",pid:820,addr:"0x7ffb14000000",prot:"R--",priv:false,file:"locale.nls",sig:"data (mapped file)"},
+    {proc:"rundll32.exe",pid:4210,addr:"0x0000000001f0000",prot:"RWX",priv:true,file:null,sig:"90 90 90 90 90 90 … 4D 5A 90 00  (NOP sled + MZ)"},
+    {proc:"powershell.exe",pid:3330,addr:"0x0000000002a40000",prot:"R-X",priv:true,file:null,sig:"fc 48 83 e4 f0 e8 … (position-independent shellcode, high entropy)"},
+    {proc:"node.exe",pid:5102,addr:"0x0000000030000000",prot:"RWX",priv:true,file:null,sig:"V8 JIT code region (attributable to the runtime)",jit:true},
+    {proc:"chrome.exe",pid:2600,addr:"0x7ff6c0000000",prot:"R-X",priv:false,file:"chrome.dll",sig:"PE (mapped image, signed)"}
+  ];
+  function protClass(p){ return p==="RWX" ? "rwx" : (p.indexOf("X")>=0 ? "x" : ""); }
+  function render(scan){
+    var host=document.getElementById("regions"), html="";
+    REGS.forEach(function(r,i){
+      var cls="reg", tag='<span class="tag pending">not scored</span>';
+      if(scan){
+        if(r.jit){ cls="reg info"; tag='<span class="tag">tune · known JIT</span>'; }
+        else if(r.priv && r.prot.indexOf("X")>=0 && !r.file){ cls="reg flag"; tag='<span class="tag">injected</span>'; }
+        else { cls="reg clean"; tag='<span class="tag">clean</span>'; }
+      }
+      html+='<div class="'+cls+'">'+
+        '<div class="top"><span class="proc">'+r.proc+'</span><span class="pid">pid '+r.pid+'</span>'+
+        '<span class="addr">'+r.addr+'</span>'+
+        '<span class="prot '+protClass(r.prot)+'">'+r.prot+'</span>'+
+        '<span class="prot">'+(r.file?("↳ "+r.file):"private · no file")+'</span></div>'+
+        tag+
+        '<div class="sig">'+r.sig+'</div></div>';
+    });
+    host.innerHTML=html;
+  }
+  window.resetScan=function(){ render(false); document.getElementById("verdict").textContent="Run malfind to classify each region."; };
+  window.runMalfind=function(){
+    render(true);
+    var flags=REGS.filter(function(r){return r.priv && r.prot.indexOf("X")>=0 && !r.file && !r.jit;});
+    var jit=REGS.filter(function(r){return r.jit;});
+    var clean=REGS.length-flags.length-jit.length;
+    var v=document.getElementById("verdict"), h="";
+    flags.forEach(function(r){
+      h+='<div><span class="crit">INJECTED</span> '+r.proc+' (pid '+r.pid+') @ '+r.addr+' — private, executable, no file backing; '+
+         (r.sig.indexOf("MZ")>=0?"carries a NOP sled + MZ header.":"position-independent shellcode.")+'</div>';
+    });
+    jit.forEach(function(r){
+      h+='<div><span class="warn">TUNE</span> '+r.proc+' (pid '+r.pid+') — private RWX, but attributable to a JIT runtime. Baseline it; don\'t convict it.</div>';
+    });
+    h+='<div class="big" style="margin-top:7px"><span class="crit">'+flags.length+' injected</span> · <span class="warn">'+jit.length+' to tune</span> · <span class="ok">'+clean+' clean (mapped images)</span></div>';
+    h+='<div style="color:var(--faint)">Next step is corroboration, not quarantine: do these PIDs also show the hidden-process or outbound-socket evidence? The image states the <em>what</em>; containment is an endpoint decision.</div>';
+    v.innerHTML=h;
+  };
+
+  // cross-view: pslist vs psscan
+  var PSLIST=[{n:"explorer.exe",p:1012},{n:"svchost.exe",p:820},{n:"rundll32.exe",p:4210},{n:"powershell.exe",p:3330},{n:"chrome.exe",p:2600},{n:"node.exe",p:5102}];
+  var PSSCAN=PSLIST.concat([{n:"svch0st.exe",p:6620,hidden:true}]);
+  function renderPS(){
+    document.getElementById("pslist").innerHTML=PSLIST.map(function(x){return '<div class="p"><span>'+x.n+'</span><span class="pd">pid '+x.p+'</span></div>';}).join("");
+    document.getElementById("psscan").innerHTML=PSSCAN.map(function(x){return '<div class="p'+(x.hidden?" hid":"")+'"><span>'+x.n+(x.hidden?"  ← not in pslist":"")+'</span><span class="pd">pid '+x.p+'</span></div>';}).join("");
+  }
+
+  resetScan(); renderPS();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

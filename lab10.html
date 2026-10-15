@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 10 — ROP / JOP</title>
+<meta name="description" content="Detect the exploit that injects no code at all: return-oriented and jump-oriented programming, caught by control-flow integrity — return provenance, a shadow stack, and the stack pivot.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:140px;color:var(--amber)}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  /* return trace */
+  .trace{display:grid;gap:7px;margin-top:4px}
+  .rt{border:1px solid var(--line);border-radius:9px;background:var(--panel-2);padding:9px 12px;font-family:var(--mono);font-size:.78rem;min-width:0}
+  .rt .r1{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;justify-content:space-between}
+  .rt .ad{color:var(--fg)} .rt .mod{color:var(--faint);font-size:.72rem}
+  .rt .gl{color:var(--muted);font-size:.72rem;margin-top:3px}
+  .rt .vd{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--line);border-radius:5px;padding:1px 7px;color:var(--faint);white-space:nowrap}
+  .rt.ok{border-color:var(--cyan-dim)} .rt.ok .vd{color:var(--good);border-color:var(--cyan-dim)}
+  .rt.bad{border-color:var(--crit);background:#180f10} .rt.bad .vd{color:var(--crit);border-color:var(--crit)}
+  /* shadow stack */
+  .shadow{display:grid;gap:12px;margin-top:14px}
+  @media(min-width:620px){.shadow{grid-template-columns:1fr 1fr}}
+  .scol{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;min-width:0}
+  .scol h4{margin:0 0 8px;font-family:var(--mono);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .scol .s{font-family:var(--mono);font-size:.76rem;padding:4px 8px;border-radius:6px;border:1px solid transparent;color:var(--muted)}
+  .scol .s.div{background:#2a1414;border-color:var(--crit);color:var(--crit)}
+  .pivot{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;margin-top:12px;font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+  .pivot.flag{border-color:var(--crit)} .pivot .hz{color:var(--crit)} .pivot .ok{color:var(--good)}
+  .verdict{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;margin-top:12px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7}
+  .verdict .big{font-weight:600;font-size:.9rem} .verdict .crit{color:var(--crit)} .verdict .ok{color:var(--good)}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html" class="cur">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 10 · detection engineering</div>
+    <h1>The exploit that injects <span class="cy">nothing</span>.</h1>
+    <p class="sub">When defenders made memory non-executable (DEP / W^X), injected shellcode stopped running — so attackers stopped injecting. Return- and jump-oriented programming build the payload out of code that's <em>already there</em>: tiny fragments ending in <code>ret</code> or <code>jmp</code>, chained into a program by a crafted stack. There's no sled (Lab 8), no new executable page (Lab 6), no foreign file (Lab 9) — nothing for a byte scanner to see. So the detection moves to the one thing the attack can't fake: <b>control flow that doesn't obey the rules</b>.</p>
+    <div class="banner"><b>Detection only.</b> No gadgets are built or chained here. This lab reasons about the control-flow-integrity signals a defender watches — return provenance, a shadow stack, the stack pivot — and shows how hardware now enforces them.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — no payload, only misuse</div>
+  <h2>Reuse leaves a different mark</h2>
+  <p class="lede">A normal program returns to the instruction right after a <code>call</code> — that's the contract of a function return. A ROP chain ignores that contract: it returns into the <em>middle</em> of existing functions, to short sequences that do one small thing and <code>ret</code> again, walking down a stack the attacker controls. The bytes are all legitimate, signed, on-disk code. What's illegitimate is the <b>order</b> they run in, and that disorder is measurable.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">return provenance</span><span class="d">A real return lands on an address <em>immediately preceded by a call</em>. A gadget return lands mid-function, on an address no call ever targets. Check each return's target against that rule.</span></div>
+    <div class="r"><span class="lab">shadow stack</span><span class="d">Keep a second, protected copy of every return address as calls happen. On each <code>ret</code>, compare. A ROP chain's returns were never pushed by a real call — so they diverge from the shadow copy. This is now hardware (Intel CET).</span></div>
+    <div class="r"><span class="lab">the stack pivot</span><span class="d">To drive the chain, the exploit first points the stack pointer at attacker-controlled memory — a <em>pivot</em> from the real stack into a heap/buffer region. A stack pointer suddenly outside the thread's stack bounds is a loud, early tell.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — verify the control flow</div>
+  <h2>Catch the chain by its returns</h2>
+  <p class="lede">A captured return trace from a crashing process. Verify it: each return is checked for call-preceded provenance and against the shadow stack, and the stack pointer is checked against the thread's real stack bounds. The genuine frames pass; the chain lights up.</p>
+  <div class="controls">
+    <button class="btn" id="verBtn" onclick="verify()">▶ verify control flow</button>
+    <button class="btn ghost" onclick="resetCfi()">reset</button>
+  </div>
+  <div class="trace" id="trace"></div>
+  <div class="shadow">
+    <div class="scol"><h4>CPU return addresses</h4><div id="cpuStack"></div></div>
+    <div class="scol"><h4>shadow stack (protected)</h4><div id="shStack"></div></div>
+  </div>
+  <div class="pivot" id="pivot"></div>
+  <div class="verdict" id="verdict">Verify to check return provenance, the shadow stack, and the stack pointer.</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — who enforces it now</div>
+  <h2>The checks became silicon</h2>
+  <p class="lede">Software ROP detection was noisy and slow, so control-flow integrity moved down into the hardware and the loader. You don't hand-roll this in a SOC — you verify it's <em>on</em>, and you alert when a process trips it:</p>
+  <pre><span class="c"># the enforcement layers, newest first</span>
+Intel <span class="k">CET</span>        shadow stack (SS) + indirect-branch tracking (IBT)   <span class="c">; ret/jmp targets enforced in HW</span>
+ARM   <span class="k">PAC / BTI</span>  pointer authentication + branch-target identification <span class="c">; Apple silicon</span>
+MS    <span class="k">CFG / XFG</span>  control-flow guard — valid indirect-call targets only
+OS    <span class="k">ACG + stack-pivot</span> checks   <span class="c">; arbitrary-code-guard, EMET/WDEG heritage</span>
+
+<span class="c"># the SOC job: confirm it's enabled, and treat a CFI fault as an exploit signal</span>
+a CET #CP (control-protection) fault  ->  ROP/JOP attempt, not a normal crash</pre>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>JOP doesn't even use ret</h2>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Jump-oriented programming sidesteps the shadow stack.</b> JOP chains gadgets ending in <code>jmp</code>, driven by a dispatcher, so there's no <code>ret</code> to check against a return-address stack. That's why modern CFI needs <em>indirect-branch</em> tracking (IBT/BTI), not just a shadow stack — defeating one class doesn't defeat the family.</li>
+    <li><b style="color:var(--fg)">Legitimate code breaks the simple rules.</b> Tail-call optimization, <code>longjmp</code>, exception unwinding, and JIT engines all produce returns or jumps that look irregular. Naive provenance checks false-positive on them — which is exactly why the durable version is hardware-assisted and exception-aware.</li>
+    <li><b style="color:var(--fg)">It's an exploitation primitive, not the goal.</b> ROP/JOP usually exists only to flip memory back to executable (e.g. a <code>VirtualProtect</code> chain) and then jump to a conventional payload — which lands you right back in Lab 6's territory. Catch it early (the pivot) or catch the aftermath (the RWX page); best, catch both.</li>
+    <li><b style="color:var(--fg)">You verify posture, then watch for faults.</b> The SOC-practical detection isn't re-deriving CFI in software — it's confirming CET/PAC/CFG are enabled on the fleet and routing control-protection faults into the timeline (Lab 7) as exploitation evidence.</li>
+  </ul>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">the technique</span>
+        <b>H. Shacham</b> (2007), &ldquo;The Geometry of Innocent Flesh on the Bone: Return-into-libc without Function Calls,&rdquo; <em>ACM CCS</em> — the ROP paper.<br>
+        <b>Checkoway et al.</b> (2010), &ldquo;Return-Oriented Programming without Returns&rdquo; — JOP.<br>
+        this lab: <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">the defenses</span>
+        <b>Intel CET</b> — shadow stack + IBT.<br>
+        <b>ARM</b> — Pointer Authentication (PAC) + Branch Target Identification (BTI).<br>
+        <b>Microsoft</b> — Control Flow Guard (CFG/XFG), Arbitrary Code Guard.<br>
+        <b>MITRE ATT&amp;CK</b> — Exploitation techniques; the pivot &amp; RWX aftermath map to Labs 6 &amp; 7.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 11 — macOS persistence: Lab 1's story on your own platform, LaunchAgents to TCC, osquery-driven.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 10 · ROP / JOP · the bytes are legitimate; the order is the exploit · confirm CFI is on, route the fault to the timeline · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  // captured return trace from a crashing process. Real frames vs a ROP chain after an overflow.
+  var TRACE=[
+    {ad:"0x7ff6a0021040",mod:"app.exe",gl:"returns after call site in main()",callPreceded:true,shadow:"0x7ff6a0021040"},
+    {ad:"0x7ff6a0022c18",mod:"app.exe",gl:"returns after call site in parse()",callPreceded:true,shadow:"0x7ff6a0022c18"},
+    {ad:"0x7ffb21a09c13",mod:"ntdll.dll",gl:"gadget: pop rax ; ret  (mid-function)",callPreceded:false,shadow:"0x7ff6a0023a90"},
+    {ad:"0x7ffb21b17e22",mod:"kernel32.dll",gl:"gadget: pop rcx ; ret  (mid-function)",callPreceded:false,shadow:"(stack exhausted)"},
+    {ad:"0x7ffb21a1d4a0",mod:"kernelbase.dll",gl:"gadget: mov [rcx],rax ; ret",callPreceded:false,shadow:"(stack exhausted)"},
+    {ad:"0x7ffb21b02110",mod:"kernel32.dll",gl:"VirtualProtect stub (flip page to RWX)",callPreceded:false,shadow:"(stack exhausted)"}
+  ];
+  var RSP_REAL="0x000000e3b4fff8d0", STACK_LO="0x000000e3b4f00000", STACK_HI="0x000000e3b5000000";
+  var RSP_NOW="0x000001c40040a060"; // pivoted into a heap buffer
+
+  function renderTrace(ver){
+    document.getElementById("trace").innerHTML=TRACE.map(function(r){
+      var bad = ver && (!r.callPreceded || r.ad!==r.shadow);
+      var cls="rt"+(ver?(bad?" bad":" ok"):"");
+      var vd = ver?(bad?'<span class="vd">ROP gadget</span>':'<span class="vd">valid return</span>'):'<span class="vd">not checked</span>';
+      return '<div class="'+cls+'"><div class="r1"><span class="ad">'+r.ad+' <span class="mod">'+r.mod+'</span></span>'+vd+'</div>'+
+             '<div class="gl">'+r.gl+(ver&&!r.callPreceded?' · not call-preceded':'')+(ver&&r.ad!==r.shadow?' · shadow-stack divergence':'')+'</div></div>';
+    }).join("");
+  }
+  function renderShadow(ver){
+    var cpu=document.getElementById("cpuStack"), sh=document.getElementById("shStack");
+    cpu.innerHTML=TRACE.map(function(r){var div=ver&&r.ad!==r.shadow;return '<div class="s'+(div?" div":"")+'">'+r.ad+'</div>';}).join("");
+    sh.innerHTML=TRACE.map(function(r){var div=ver&&r.ad!==r.shadow;return '<div class="s'+(div?" div":"")+'">'+r.shadow+'</div>';}).join("");
+  }
+  function renderPivot(ver){
+    var p=document.getElementById("pivot");
+    if(!ver){ p.className="pivot"; p.innerHTML='stack pointer: '+RSP_NOW+' — not yet checked'; return; }
+    p.className="pivot flag";
+    p.innerHTML='RSP = <span class="hz">'+RSP_NOW+'</span> · thread stack bounds ['+STACK_LO+' … '+STACK_HI+']<br>'+
+      '<span class="hz">PIVOT</span> — stack pointer is outside the thread stack, in a heap buffer. The chain is driven from attacker-controlled memory.';
+  }
+  window.resetCfi=function(){ renderTrace(false); renderShadow(false); renderPivot(false);
+    document.getElementById("verdict").textContent="Verify to check return provenance, the shadow stack, and the stack pointer."; };
+  window.verify=function(){
+    renderTrace(true); renderShadow(true); renderPivot(true);
+    var bad=TRACE.filter(function(r){return !r.callPreceded||r.ad!==r.shadow;});
+    document.getElementById("verdict").innerHTML=
+      '<div class="big"><span class="crit">ROP CHAIN DETECTED</span> — '+bad.length+' returns to non-call-preceded gadgets, shadow-stack divergence, and a stack pivot into the heap.</div>'+
+      '<div>No injected code, no new executable page — only reused, legitimate bytes run in an illegitimate order, ending in a <code>VirtualProtect</code> gadget to flip a page RWX (→ Lab 6). On CET hardware this raises a <span class="crit">#CP control-protection fault</span>; route it to the timeline (Lab 7) as exploitation evidence.</div>';
+  };
+  renderTrace(false); renderShadow(false); renderPivot(false);
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

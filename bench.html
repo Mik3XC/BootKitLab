@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Bench</title>
+<meta name="description" content="An ASCII and hex workbench: the ASCII table, a live xxd / hexdump -C viewer, hex-to-ASCII, and classic chat ciphers for the over-the-wire whisper.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.55;
+       padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
+  .wrap{max-width:980px;margin:0 auto}
+  a{color:var(--cyan)}
+  h1{font-family:var(--mono);font-size:clamp(1.3rem,4.5vw,2rem);margin:.1rem 0}
+  h1 .cy{color:var(--cyan)}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--amber)}
+  p{color:var(--muted);margin:.5rem 0}
+  code{font-family:var(--mono);color:var(--amber)}
+  nav{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent;transition:background-color .28s ease,color .28s ease,border-color .28s ease}
+  nav a:hover{color:var(--fg);background:var(--panel);border-color:var(--line)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  h2{font-family:var(--mono);font-size:1.05rem;color:var(--cyan);margin:0 0 2px;letter-spacing:.02em}
+  .sectlab{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin:16px 0;min-width:0}
+  textarea,input[type=text]{width:100%;font-family:var(--mono);font-size:.86rem;background:#05090c;color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;padding:10px 12px;resize:vertical}
+  label{font-family:var(--mono);font-size:.74rem;color:var(--muted);display:block;margin:2px 0 5px}
+  .out{font-family:var(--mono);font-size:.8rem;background:#040a04;border:1px solid var(--cyan-dim);border-radius:8px;color:#8fe88f;
+    padding:12px;margin-top:10px;white-space:pre;overflow-x:auto;text-shadow:0 0 6px rgba(120,230,120,.25);line-height:1.5;min-height:2.4em}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+  .seg button{font-family:var(--mono);font-size:.76rem;background:transparent;color:var(--muted);border:0;padding:7px 12px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--cyan);color:#04100f;font-weight:600}
+  .keyin{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .keyin input{flex:1;min-width:120px}
+  .keyin input[type=number]{width:80px;flex:0 0 auto}
+  .copy{font-family:var(--mono);font-size:.74rem;cursor:pointer;border-radius:7px;padding:7px 12px;background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .copy:hover{color:var(--fg);border-color:var(--cyan-dim)}
+  .hint{font-size:.72rem;color:var(--faint);margin-top:8px;font-family:var(--mono);line-height:1.5}
+  /* ascii table */
+  .asciigrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:4px;margin-top:8px}
+  .ac{border:1px solid var(--line);border-radius:6px;background:var(--panel-2);padding:5px 7px;font-family:var(--mono);font-size:.72rem;min-width:0}
+  .ac .d{color:var(--cyan)} .ac .h{color:var(--amber)} .ac .ch{color:var(--fg);font-weight:600}
+  .ac.ctrl{opacity:.72} .ac.ctrl .ch{color:var(--viol)}
+  .ac .nm{color:var(--faint);font-size:.66rem}
+  .filterrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  footer{margin-top:22px;border-top:1px solid var(--line);padding-top:16px;font-family:var(--mono);font-size:.74rem;color:var(--faint)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a class="here" href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <a href="lab9.html">the lab →</a>
+  </nav>
+  <div class="eyebrow">Boot Chain Lab · the bench</div>
+  <h1>ASCII &amp; <span class="cy">hex</span> workbench</h1>
+  <p>Every lab here comes back to the same literacy: bytes, their hex, and the characters they stand for. This is the bench for that — the ASCII table, a live <code>hexdump&nbsp;-C</code> / <code>xxd</code>, the reverse (hex&nbsp;→&nbsp;text, like <code>xxd&nbsp;-r</code>), and a few classic ciphers for whispering over the wire. Everything runs locally in the page; nothing is sent anywhere.</p>
+
+  <!-- HEXDUMP -->
+  <div class="panel">
+    <h2>hexdump</h2>
+    <div class="sectlab">text → xxd / hexdump -C</div>
+    <label for="hdin" style="margin-top:10px">input text (UTF-8)</label>
+    <textarea id="hdin" rows="2" oninput="hexdump()">Wake up, Neo...</textarea>
+    <div class="row">
+      <div class="seg" role="group" aria-label="style">
+        <button id="styX" aria-pressed="true" onclick="setHd('xxd')">xxd</button>
+        <button id="styC" aria-pressed="false" onclick="setHd('c')">hexdump -C</button>
+      </div>
+      <button class="copy" onclick="copyOut('hdout')">copy</button>
+    </div>
+    <div class="out" id="hdout"></div>
+    <div class="hint">offset · hex (8+8 grouping) · <code>|printable|</code> with non-printables shown as <code>.</code> — exactly how you read a capture or a carved buffer in Labs 5, 6, 8 and 9.</div>
+  </div>
+
+  <!-- HEX2DUMP (reverse) -->
+  <div class="panel">
+    <h2>hex → text</h2>
+    <div class="sectlab">paste hex, get bytes back (xxd -r)</div>
+    <label for="h2in" style="margin-top:10px">hex (spaces, newlines, <code>0x</code>, <code>\x</code>, <code>:</code> all ignored)</label>
+    <textarea id="h2in" rows="2" oninput="hex2txt()">57 61 6b 65 20 75 70 2c 20 4e 65 6f 2e 2e 2e</textarea>
+    <div class="row"><button class="copy" onclick="copyOut('h2out')">copy</button></div>
+    <div class="out" id="h2out"></div>
+    <div class="hint">decoded ASCII/UTF-8; bytes outside printable range render as <code>·</code>. Odd/º invalid nibbles are reported, not guessed.</div>
+  </div>
+
+  <!-- CIPHERS -->
+  <div class="panel">
+    <h2>chat ciphers</h2>
+    <div class="sectlab">encode a whisper for the wire — classic, reversible, not security</div>
+    <label for="cin" style="margin-top:10px">message</label>
+    <textarea id="cin" rows="2" oninput="cipher()">follow the white rabbit</textarea>
+    <div class="row">
+      <div class="seg" role="group" aria-label="cipher">
+        <button class="cbtn" data-c="rot13" aria-pressed="true" onclick="setC('rot13')">ROT13</button>
+        <button class="cbtn" data-c="caesar" aria-pressed="false" onclick="setC('caesar')">Caesar</button>
+        <button class="cbtn" data-c="atbash" aria-pressed="false" onclick="setC('atbash')">Atbash</button>
+        <button class="cbtn" data-c="xor" aria-pressed="false" onclick="setC('xor')">XOR</button>
+        <button class="cbtn" data-c="b64" aria-pressed="false" onclick="setC('b64')">Base64</button>
+        <button class="cbtn" data-c="hex" aria-pressed="false" onclick="setC('hex')">Hex</button>
+        <button class="cbtn" data-c="bin" aria-pressed="false" onclick="setC('bin')">Binary</button>
+      </div>
+    </div>
+    <div class="keyin" id="keywrap" hidden>
+      <label id="keylab" for="ckey" style="margin:0">shift</label>
+      <input type="number" id="cnum" value="3" min="1" max="25" oninput="cipher()" hidden>
+      <input type="text" id="ckey" value="neo" oninput="cipher()" hidden placeholder="xor key">
+    </div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="direction">
+        <button id="dirE" aria-pressed="true" onclick="setDir('enc')">encode</button>
+        <button id="dirD" aria-pressed="false" onclick="setDir('dec')">decode</button>
+      </div>
+      <button class="copy" onclick="copyOut('cout')">copy</button>
+    </div>
+    <div class="out" id="cout"></div>
+    <div class="hint" id="chint"></div>
+  </div>
+
+  <!-- ASCII TABLE -->
+  <div class="panel">
+    <h2>ASCII table</h2>
+    <div class="sectlab">0–127 · dec / hex / char · the ground truth</div>
+    <div class="filterrow">
+      <div class="seg" role="group" aria-label="range">
+        <button id="rAll" aria-pressed="true" onclick="setRange('all')">all</button>
+        <button id="rPrint" aria-pressed="false" onclick="setRange('print')">printable</button>
+        <button id="rCtrl" aria-pressed="false" onclick="setRange('ctrl')">control</button>
+      </div>
+      <input type="text" id="afind" placeholder="find: A, 0x41, 65, nl…" oninput="renderAscii()" style="flex:1;min-width:140px">
+    </div>
+    <div class="asciigrid" id="asciigrid"></div>
+    <div class="hint">control codes (0–31, 127) in violet with their mnemonics; <code>0x1b</code> ESC is the one <code>echo-serial.asm</code> watches to bail out.</div>
+  </div>
+
+  <footer>the bench · local-only · ASCII is the contract every byte on the wire signs</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  function $(id){return document.getElementById(id);}
+  function enc(s){try{return new TextEncoder().encode(s);}catch(e){var o=[];for(var i=0;i<s.length;i++)o.push(s.charCodeAt(i)&0xff);return o;}}
+  function hx(n){return (n&0xff).toString(16).padStart(2,"0");}
+  function printable(b){return b>=0x20&&b<0x7f;}
+
+  // ---- hexdump ----
+  var hdStyle="xxd";
+  window.setHd=function(s){hdStyle=s;$("styX").setAttribute("aria-pressed",s==="xxd");$("styC").setAttribute("aria-pressed",s==="c");hexdump();};
+  window.hexdump=function(){
+    var bytes=enc($("hdin").value), out="", i,j;
+    if(!bytes.length){$("hdout").textContent="(empty)";return;}
+    for(i=0;i<bytes.length;i+=16){
+      var off=i.toString(16).padStart(8,"0");
+      var hexs="",asc="";
+      for(j=0;j<16;j++){
+        if(i+j<bytes.length){var b=bytes[i+j];hexs+=hx(b)+" ";asc+=printable(b)?String.fromCharCode(b):".";}
+        else{hexs+="   ";asc+=" ";}
+        if(hdStyle==="xxd"&&j===7)hexs+=" ";
+        if(hdStyle==="c"&&j===7)hexs+=" ";
+      }
+      if(hdStyle==="xxd"){
+        // xxd groups 2 bytes; emulate xxd default: 16 bytes in 2-char groups
+        var g="";var line=bytes.slice(i,i+16);
+        for(j=0;j<16;j++){g+=(i+j<bytes.length?hx(bytes[i+j]):"  ");if(j%2)g+=" ";}
+        out+=off+": "+g+" "+asc.replace(/ +$/,"")+"\n";
+      }else{
+        out+=off+"  "+hexs+" |"+asc.replace(/ +$/,"")+"|\n";
+      }
+    }
+    $("hdout").textContent=out.replace(/\n$/,"");
+  };
+
+  // ---- hex -> text ----
+  window.hex2txt=function(){
+    var raw=$("h2in").value.replace(/0x/gi,"").replace(/\\x/gi,"").replace(/[\s:,]/g,"");
+    if(!raw){$("h2out").textContent="(empty)";return;}
+    if(!/^[0-9a-fA-F]*$/.test(raw)){$("h2out").textContent="✗ non-hex characters present";return;}
+    if(raw.length%2){$("h2out").textContent="✗ odd number of hex digits ("+raw.length+")";return;}
+    var s="";for(var i=0;i<raw.length;i+=2){var b=parseInt(raw.substr(i,2),16);s+=printable(b)?String.fromCharCode(b):"·";}
+    $("h2out").textContent=s+"\n\n("+(raw.length/2)+" bytes)";
+  };
+
+  // ---- ciphers ----
+  var cMode="rot13", cDir="enc";
+  function shiftAlpha(s,n){return s.replace(/[a-z]/gi,function(c){var base=c<="Z"?65:97;return String.fromCharCode((c.charCodeAt(0)-base+(n%26+26))%26+base);});}
+  function atbash(s){return s.replace(/[a-z]/gi,function(c){return c<="Z"?String.fromCharCode(90-(c.charCodeAt(0)-65)):String.fromCharCode(122-(c.charCodeAt(0)-97));});}
+  function xorKey(bytes,key){var k=enc(key),o=[];if(!k.length)return bytes;for(var i=0;i<bytes.length;i++)o.push(bytes[i]^k[i%k.length]);return o;}
+  function toHexStr(bytes){var s="";for(var i=0;i<bytes.length;i++)s+=hx(bytes[i])+(i%16===15?"\n":" ");return s.trim();}
+  function fromHexStr(t){var raw=t.replace(/0x/gi,"").replace(/\\x/gi,"").replace(/[\s:,]/g,"");if(!/^[0-9a-fA-F]*$/.test(raw)||raw.length%2)return null;var o=[];for(var i=0;i<raw.length;i+=2)o.push(parseInt(raw.substr(i,2),16));return o;}
+  function bytesToStr(b){var s="";for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return s;}
+  function b64enc(s){try{return btoa(unescape(encodeURIComponent(s)));}catch(e){return "(encode error)";}}
+  function b64dec(s){try{return decodeURIComponent(escape(atob(s.replace(/\s/g,""))));}catch(e){return "✗ invalid Base64";}}
+
+  var NEEDS={caesar:"num",xor:"key"};
+  window.setC=function(m){cMode=m;document.querySelectorAll('.cbtn').forEach(function(b){b.setAttribute('aria-pressed',b.dataset.c===m);});
+    var need=NEEDS[m];$("keywrap").hidden=!need;
+    $("cnum").hidden=need!=="num";$("ckey").hidden=need!=="key";
+    $("keylab").textContent=need==="num"?"shift":(need==="key"?"xor key":"");
+    cipher();};
+  window.setDir=function(d){cDir=d;$("dirE").setAttribute("aria-pressed",d==="enc");$("dirD").setAttribute("aria-pressed",d==="dec");cipher();};
+  window.cipher=function(){
+    var t=$("cin").value, r="", h="";
+    if(cMode==="rot13"){ r=shiftAlpha(t,13); h="ROT13 is its own inverse — encode and decode are the same. Letters only."; }
+    else if(cMode==="caesar"){ var n=parseInt($("cnum").value,10)||0; r=shiftAlpha(t,cDir==="enc"?n:-n); h="Caesar shift by "+n+". Classic, trivially broken by frequency — a toy, not a lock."; }
+    else if(cMode==="atbash"){ r=atbash(t); h="Atbash mirrors the alphabet (A↔Z). Self-inverse."; }
+    else if(cMode==="xor"){ var key=$("ckey").value; if(cDir==="enc"){ r=toHexStr(xorKey(enc(t),key)); h="XOR with repeating key → hex out. Decode expects hex in. XOR is reversible, NOT secure (key reuse leaks)."; } else { var b=fromHexStr(t); if(!b){r="✗ decode expects hex (the encode output)";} else {r=bytesToStr(xorKey(b,key));} h="XOR decode: hex → text with the same key."; } }
+    else if(cMode==="b64"){ r=cDir==="enc"?b64enc(t):b64dec(t); h="Base64 is encoding, not encryption — it hides nothing. The most common obfuscation you'll decode in triage."; }
+    else if(cMode==="hex"){ r=cDir==="enc"?toHexStr(enc(t)):(function(){var b=fromHexStr(t);return b?bytesToStr(b):"✗ expects hex";})(); h="Straight hex of the UTF-8 bytes."; }
+    else if(cMode==="bin"){ if(cDir==="enc"){ r=Array.prototype.map.call(enc(t),function(b){return b.toString(2).padStart(8,"0");}).join(" "); } else { var bits=t.replace(/[^01]/g,"");if(bits.length%8){r="✗ bits not a multiple of 8";}else{var o="";for(var i=0;i<bits.length;i+=8)o+=String.fromCharCode(parseInt(bits.substr(i,8),2));r=o;} } h="8-bit binary per byte."; }
+    $("cout").textContent=r||"(empty)"; $("chint").textContent=h;
+  };
+
+  // ---- copy ----
+  window.copyOut=function(id){var t=$(id).textContent;if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(function(){sel(id);});}else sel(id);};
+  function sel(id){var el=$(id),r=document.createRange();r.selectNodeContents(el);var s=getSelection();s.removeAllRanges();s.addRange(r);}
+
+  // ---- ascii table ----
+  var CTRL={0:"nul",1:"soh",2:"stx",3:"etx",4:"eot",5:"enq",6:"ack",7:"bel",8:"bs",9:"ht",10:"nl",11:"vt",12:"np",13:"cr",14:"so",15:"si",16:"dle",17:"dc1",18:"dc2",19:"dc3",20:"dc4",21:"nak",22:"syn",23:"etb",24:"can",25:"em",26:"sub",27:"esc",28:"fs",29:"gs",30:"rs",31:"us",127:"del"};
+  var aRange="all";
+  window.setRange=function(r){aRange=r;$("rAll").setAttribute("aria-pressed",r==="all");$("rPrint").setAttribute("aria-pressed",r==="print");$("rCtrl").setAttribute("aria-pressed",r==="ctrl");renderAscii();};
+  window.renderAscii=function(){
+    var f=$("afind").value.trim(), want=null;
+    if(f){ if(/^0x[0-9a-f]+$/i.test(f)) want=parseInt(f,16); else if(/^\d+$/.test(f)) want=parseInt(f,10); else if(f.length===1) want=f.charCodeAt(0); else { want="nm:"+f.toLowerCase(); } }
+    var html="";
+    for(var i=0;i<128;i++){
+      var ctrl=(i<32||i===127);
+      if(aRange==="print"&&ctrl)continue;
+      if(aRange==="ctrl"&&!ctrl)continue;
+      if(want!==null){ if(typeof want==="number"){ if(i!==want)continue; } else { var nm=CTRL[i]||""; if(nm.indexOf(want.slice(3))<0)continue; } }
+      var ch = i===32?"sp" : ctrl?(CTRL[i]||"?") : String.fromCharCode(i);
+      html+='<div class="ac'+(ctrl?" ctrl":"")+'"><span class="d">'+i+'</span> <span class="h">0x'+hx(i)+'</span><br><span class="ch">'+ch+'</span>'+(ctrl&&i!==32?' <span class="nm">'+(CTRL[i]||"")+'</span>':'')+'</div>';
+    }
+    $("asciigrid").innerHTML=html||'<div class="hint">no match</div>';
+  };
+
+  hexdump(); hex2txt(); setC("rot13"); renderAscii();
+})();
+</script>
+</body>
+</html>

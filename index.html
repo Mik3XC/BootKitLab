@@ -30,7 +30,7 @@
     --bg:#0a0e12; --panel:#10161d; --panel-2:#0d1318; --line:#1f2a33;
     --fg:#d7e0e6; --muted:#8294a0; --faint:#5a6a74;
     --amber:#e8a13a; --amber-dim:#7a5a28; --cyan:#43c0b8; --cyan-dim:#1f4f4c;
-    --good:#5fc27e; --warn:#e8a13a; --crit:#e05c5c;
+    --good:#5fc27e;--viol:#a98bd6; --warn:#e8a13a; --crit:#e05c5c;
     --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     color-scheme:dark;
@@ -174,6 +174,36 @@
   nav a.cta{color:var(--cyan)}
   @media(hover:hover){nav a.cta:hover{background:#0c1a1a;border-color:var(--cyan-dim)}}
   @media(hover:none){nav a:hover,.labs-btn:hover{background:transparent;color:var(--muted);border-color:transparent}}
+  #actors .lede{color:var(--muted)}
+  #actors .actors{display:grid;gap:12px;grid-template-columns:1fr;margin-top:.3rem}
+  @media(min-width:640px){#actors .actors{grid-template-columns:1fr 1fr}}
+  @media(min-width:900px){#actors .actors{grid-template-columns:1fr 1fr 1fr}}
+  .actor{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px;min-width:0}
+  .actor .hat{font-family:var(--mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;border:1px solid var(--line);border-radius:99px;padding:2px 10px;display:inline-block}
+  .actor.bh .hat{color:var(--crit);border-color:var(--crit)}
+  .actor.gh .hat{color:var(--muted);border-color:var(--faint)}
+  .actor.wh .hat{color:var(--good);border-color:var(--cyan-dim)}
+  .actor.ht .hat{color:var(--viol);border-color:#5a4a7a}
+  .actor.apt .hat{color:var(--amber);border-color:var(--amber-dim)}
+  .actor h3{font-family:var(--mono);font-size:1rem;margin:9px 0 2px}
+  .actor .mo{font-size:.84rem;color:var(--muted);margin:.3rem 0}
+  .actor .df{font-family:var(--mono);font-size:.72rem;color:var(--faint);margin-top:8px;border-top:1px dashed var(--line);padding-top:7px;line-height:1.55}
+  .actor .df b{color:var(--cyan);font-weight:500}
+  .namezoo{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.85;margin-top:14px}
+  .namezoo b{color:var(--fg)} .namezoo .cn{color:var(--amber)}
+  .namezoo .vend{color:var(--fg);font-weight:600}
+  .namezoo .zoogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:5px;margin:9px 0 4px}
+  .namezoo .zoogrid span{border:1px solid var(--line);border-radius:6px;background:var(--panel-2);padding:4px 8px;font-size:.72rem;color:var(--muted);min-width:0}
+  .namezoo .zoogrid b{color:var(--amber);font-weight:600}
+  .namezoo .row2{margin-top:9px}
+  #about .aboutgrid{display:grid;gap:16px}
+  @media(min-width:720px){#about .aboutgrid{grid-template-columns:1.6fr 1fr}}
+  #about .acard{border:1px solid var(--line);border-radius:12px;background:var(--panel-2);padding:14px;font-family:var(--mono);height:fit-content;min-width:0}
+  #about .acard .k{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:11px}
+  #about .acard .k.first{margin-top:0}
+  #about .acard .v{font-size:.84rem;color:var(--fg);margin-top:2px;word-break:break-word}
+  #about .acard .v a{color:var(--cyan)}
+  #about blockquote{border-left:2px solid var(--cyan-dim);margin:0 0 1rem;padding:2px 0 2px 14px;font-family:var(--mono);font-size:.9rem;color:var(--fg)}
 </style>
 
 <header>
@@ -183,9 +213,13 @@
       <a href="#chain">boot chain</a>
       <a href="#chainloader">chainloader</a>
       <a href="#forth">forth os</a>
+      <a href="#about">about</a>
+      <a href="#actors">threat actors</a>
       <a href="live.html" class="cta">▶ boot it live</a>
     
-      <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab5.html">Lab 5 · Wire signatures</a><span class="soon">Lab 6 · Memory forensics · soon</span></div></div>
+      <a href="bench.html">the bench</a>
+      <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
     </nav>
   </div>
 </header>
@@ -226,8 +260,64 @@ booted - speak Forth over serial (port 44444)<br>
       <q>Perception is the mechanism. But at what point does perception become self-fulfilling prophecy? Then at what point does it take hold and become the reality? When does it switch &mdash; when does &lsquo;One&rsquo; become a red-teamer, working in Blue?</q>
       <span class="sig">&mdash; 3XC</span>
     </div>
+    <div class="sigbody" id="sig4" hidden>
+      <q>They say it&rsquo;s never been done before. Good &mdash; that&rsquo;s the whole job. A defender who can&rsquo;t imagine the attack that hasn&rsquo;t happened yet is already a step behind. So I follow the white rabbit all the way down, think the thought the adversary would think &mdash; and then I build the thing that catches it. The hypothesis is the point. I don&rsquo;t swing the blade; I measure where it would land.</q>
+      <span class="sig">&mdash; 3XC</span>
+    </div>
+    <div class="sigbody" id="sig5" hidden>
+      <q>&hellip;Through the wormhole the Vulpus Vigil emerged one Hallow&rsquo;d Halloween Morning at Dusk before Daybreak Dawn&hellip;</q>
+      <span class="sig">&mdash; 3XC</span>
+    </div>
+    <div class="sigbody" id="sig6" hidden>
+      <q>The off button was always there &mdash; consented, kernel-deep, and global. What broke that July morning was not the lock; it was the only thing holding the door. The tool with the most reach to defend you has the most reach to end you &mdash; and the capability had outrun its own accountability. Not a breach. A confession, written by accident.</q>
+      <span class="sig">&mdash; 3XC</span>
+    </div>
   </div>
 </div>
+
+<section id="actors"><div class="wrap">
+  <div class="eyebrow cy">00 &mdash; know the other side</div>
+  <h2>Threat actors</h2>
+  <p class="lede">Detection starts with motive: who is on the other end, and what they are after, shapes how they move &mdash; and how you catch them. The blue team's first map is the cast.</p>
+  <div class="actors">
+    <div class="actor bh"><span class="hat">black hat</span><h3>Criminal</h3>
+      <p class="mo">In it for money. Ransomware and extortion (encrypt the disk, sell the key), fraud, access brokering &mdash; increasingly organized, mafia-style crews with affiliates and payrolls.</p>
+      <div class="df"><b>Defense read:</b> financially motivated and opportunistic &rarr; fast and after leverage. Watch encryption spikes, shadow-copy deletion, exfil-before-lock.</div></div>
+    <div class="actor gh"><span class="hat">grey hat</span><h3>Unsanctioned</h3>
+      <p class="mo">Operates between legal and illegal with no clear authorization &mdash; vigilantes who &ldquo;fix&rdquo; things uninvited, data brokers trading what they scrape, researchers who cross the line to make a point.</p>
+      <div class="df"><b>Defense read:</b> intent is ambiguous, so judge by action, not story. Unauthorized is unauthorized.</div></div>
+    <div class="actor wh"><span class="hat">white hat</span><h3>Authorized</h3>
+      <p class="mo">Ethical and in-scope: blue teamers, SOC analysts, pentesters and red teams under rules of engagement. CEH, OSCP, INFOSEC. <em>This chair.</em></p>
+      <div class="df"><b>Defense read:</b> your own red team is a sensor &mdash; their findings are detections you build before the real thing arrives.</div></div>
+    <div class="actor ht"><span class="hat">hacktivist</span><h3>Cause-driven</h3>
+      <p class="mo">Motivated by ideology or politics, not profit: defacements, leaks and DDoS to make a statement (the Anonymous mold). Where it shades into election and influence operations, it often overlaps with &mdash; or fronts for &mdash; nation-state info-ops.</p>
+      <div class="df"><b>Defense read:</b> timing tracks current events; expect bursts around the news cycle, and watch for leak-and-amplify.</div></div>
+    <div class="actor apt"><span class="hat">nation-state &middot; APT</span><h3>State-sponsored</h3>
+      <p class="mo">Advanced Persistent Threats: funded, patient, strategic &mdash; espionage and pre-positioning, long dwell times, custom tooling. E.g. <b>Salt Typhoon / RedMike</b> and <b>Mustang Panda</b> (PRC telecom &amp; government espionage); Mandiant's <code>UNC####</code> / <code>APT##</code> clusters.</p>
+      <div class="df"><b>Defense read:</b> quiet, legitimate-looking, living-off-the-land. Where every lab here converges &mdash; persistence, cross-view, C2, memory, the timeline.</div></div>
+  </div>
+  <div class="card namezoo">
+    <b>Reading the zoo.</b> The same adversary gets a different name from every vendor &mdash; usually keyed to nation. <span class="vend">CrowdStrike</span> assigns an animal to each country or category:
+    <div class="zoogrid">
+      <span><b>BEAR</b> Russia</span>
+      <span><b>PANDA</b> China (PRC)</span>
+      <span><b>KITTEN</b> Iran</span>
+      <span><b>CHOLLIMA</b> North Korea</span>
+      <span><b>TIGER</b> India</span>
+      <span><b>LEOPARD</b> Pakistan</span>
+      <span><b>BUFFALO</b> Vietnam</span>
+      <span><b>CRANE</b> South Korea</span>
+      <span><b>LYNX</b> Georgia</span>
+      <span><b>WOLF</b> Turkey</span>
+      <span><b>OCELOT</b> Colombia</span>
+      <span><b>SPIDER</b> eCrime</span>
+      <span><b>JACKAL</b> hacktivist</span>
+    </div>
+    <div class="row2"><span class="vend">Microsoft</span> uses weather &mdash; <span class="cn">Typhoon</span> China, <span class="cn">Blizzard</span> Russia, <span class="cn">Sleet</span> North Korea, <span class="cn">Sandstorm</span> Iran, <span class="cn">Tempest</span> financially-motivated, <span class="cn">Storm-####</span> emerging / unattributed.</div>
+    <div class="row2"><span class="vend">Mandiant</span> numbers them &mdash; <code>APT##</code> (attributed nation-state), <code>FIN##</code> (financially motivated), <code>UNC####</code> (uncategorized). Same adversary, three names &mdash; threat-intel is half translation.</div>
+    <div class="row2"><span class="vend" style="color:var(--cyan)">BlueChain &middot; proposed</span> &mdash; <b style="color:var(--amber)">VULPUS</b> (<em>Vulpes</em>, the fox): the AI-era nexus. Model providers now publish actor-misuse reporting (PRC APTs included), yet no vendor assigns an animal to AI-enabled operations &mdash; so the lab coins one. The fox: clever, adaptive, hunts at the edge of the treeline. <span style="color:var(--faint)">A 3XC coinage, offered to the zoo.</span></div>
+  </div>
+  </div></section>
 
 <section id="chain"><div class="wrap">
   <div class="eyebrow">01 — the terrain</div>
@@ -313,6 +403,26 @@ booted - speak Forth over serial (port 44444)<br>
         <div class="screen" id="exScreen" role="img" aria-label="simulated QEMU serial console"></div>
       </div>
     </div>
+  </div>
+</div></section>
+
+<section id="about"><div class="wrap">
+  <div class="eyebrow cy">// about &mdash; 3XC</div>
+  <h2>Raised in the glow of the Dead Cow</h2>
+  <blockquote>I measure the ground. I never become it.</blockquote>
+  <div class="aboutgrid">
+    <div>
+      <p class="lede"><b style="color:var(--fg)">3XC</b> is a defender who thinks in red. Raised from a child in the glow of old-school hacker culture &mdash; the cDc era, when the modem was a doorway and curiosity was the only credential &mdash; I learned the machine from the first instruction up, not the manual down.</p>
+      <p class="lede">It usually starts around 2&nbsp;AM. The house goes quiet, the shell gets deep, and somewhere past 4 the assembly stops looking like syntax and starts looking like <em>terrain</em> &mdash; ground you can measure, map, and defend. That is where this lab was written, one hash-chained page at a time. The work is blue; the imagination is red. You cannot defend an attack you cannot picture &mdash; so I picture all of them, refuse to swing the blade, and write the detection instead.</p>
+      <p class="lede">Somewhere in the treeline a fox keeps watch. <b style="color:var(--amber)">VULPUS vigil</b> &mdash; the AI-era nexus, named before the vendors got around to it. The lantern passes; the vigil holds.</p>
+    </div>
+    <aside class="acard">
+      <div class="k first">handle</div><div class="v">3XC</div>
+      <div class="k">doctrine</div><div class="v">measure, don&rsquo;t weaponize</div>
+      <div class="k">the rule</div><div class="v">recognize the attack, never construct it</div>
+      <div class="k">the work</div><div class="v"><a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div>
+      <div class="k">contact</div><div class="v">&mdash; on request &mdash;</div>
+    </aside>
   </div>
 </div></section>
 
@@ -528,9 +638,9 @@ booted - speak Forth over serial (port 44444)<br>
 </script>
 <script>
 (function(){
-  var i=1, N=3;
-  var labels={1:"// SIGNAL 01 \u2014 04:04",2:"// SIGNAL 02 \u2014 the meow packet",3:"// SIGNAL 03 \u2014 perception"};
-  var nextName={1:"signal 02 \u203a",2:"signal 03 \u203a",3:"signal 01 \u203a"};
+  var i=1, N=6;
+  var labels={1:"// SIGNAL 01 \u2014 04:04",2:"// SIGNAL 02 \u2014 the meow packet",3:"// SIGNAL 03 \u2014 perception",4:"// SIGNAL 04 \u2014 red team in blue",5:"// SIGNAL 05 \u2014 the vulpus vigil",6:"// SIGNAL 06 \u2014 the off button"};
+  var nextName={1:"signal 02 \u203a",2:"signal 03 \u203a",3:"signal 04 \u203a",4:"signal 05 \u203a",5:"signal 06 \u203a",6:"signal 01 \u203a"};
   window.nextSignal=function(){
     i = i % N + 1;
     for(var k=1;k<=N;k++){ var el=document.getElementById("sig"+k); if(el) el.hidden=(k!==i); }

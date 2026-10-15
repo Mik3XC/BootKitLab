@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 12 — DNS / DGA</title>
+<meta name="description" content="Score algorithmically generated domains and catch fast-flux: the statistical tells that survive even when the resolver traffic is encrypted.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:120px;color:var(--amber)}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  /* DGA scorer */
+  label{font-family:var(--mono);font-size:.74rem;color:var(--muted);display:block;margin:10px 0 5px}
+  input[type=text]{width:100%;font-family:var(--mono);font-size:.9rem;background:#05090c;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:9px 0}
+  .chip{font-family:var(--mono);font-size:.72rem;cursor:pointer;border-radius:7px;padding:5px 9px;background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .chip:hover{color:var(--fg);border-color:var(--cyan-dim)}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:7px;margin-top:12px}
+  .met{border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:8px 10px;font-family:var(--mono);min-width:0}
+  .met .k{font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .met .v{font-size:.95rem;color:var(--fg);margin-top:2px}
+  .met.hi .v{color:var(--crit)} .met.lo .v{color:var(--good)}
+  .dgaverdict{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:12px;font-family:var(--mono);font-size:.84rem;font-weight:600}
+  .dgaverdict.dga{border-color:var(--crit);background:#180f10;color:var(--crit)}
+  .dgaverdict.review{border-color:var(--amber-dim);background:#1a1407;color:var(--amber)}
+  .dgaverdict.benign{border-color:var(--cyan-dim);background:#0c1a1a;color:var(--good)}
+  .dgaverdict .sub{display:block;font-weight:400;color:var(--muted);font-size:.76rem;margin-top:5px}
+  /* fast-flux */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .flux{display:grid;gap:12px;margin-top:4px}
+  @media(min-width:640px){.flux{grid-template-columns:1fr 1fr}}
+  .fx{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:12px;min-width:0}
+  .fx h4{margin:0 0 3px;font-family:var(--mono);font-size:.82rem;color:var(--fg)}
+  .fx .ttl{font-family:var(--mono);font-size:.7rem;color:var(--faint);margin-bottom:7px}
+  .fx .ip{font-family:var(--mono);font-size:.72rem;display:flex;justify-content:space-between;gap:8px;padding:3px 7px;border-radius:5px;border:1px solid transparent;color:var(--muted)}
+  .fx .ip .asn{color:var(--faint)}
+  .fx.flag{border-color:var(--crit)} .fx.flag .ip{border-color:#3a1616;background:#140d0e}
+  .fx.ok{border-color:var(--cyan-dim)}
+  .fx .fv{font-family:var(--mono);font-size:.74rem;font-weight:600;margin-top:8px}
+  .fx.flag .fv{color:var(--crit)} .fx.ok .fv{color:var(--good)}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html" class="cur">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 12 · detection engineering · extends Lab 4</div>
+    <h1>The domains that <span class="cy">don't exist</span> yet.</h1>
+    <p class="sub">Lab 4 caught the DNS <em>tunnel</em>. This is the other half of the DNS fight: how C2 stays reachable when defenders block domains and seize IPs. Two moves — a <b>domain-generation algorithm</b> that mints thousands of throwaway names so a blocklist can never keep up, and <b>fast-flux</b> that rotates the IPs behind one name across a swarm of hosts. You can't enumerate what hasn't been registered — but you don't have to. The names <em>look wrong</em>, and the resolution <em>behaves wrong</em>, and both are measurable without decrypting a thing.</p>
+    <div class="banner"><b>Detection only.</b> No DGA seed, no flux network. The scorer measures the shape of a name; the flux panel measures how a name resolves. Sample data, analysis only.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the idea</div>
+  <h2>Beat the blocklist, or beat the takedown</h2>
+  <p class="lede">A hardcoded C2 domain dies the moment it's on a blocklist. So malware and its operator run the <em>same</em> algorithm against the <em>same</em> seed (often the date) to generate hundreds of candidate domains a day; the operator registers one, the malware tries them all until something answers. You can't pre-block a list you don't have. Fast-flux solves the other problem — keeping the IP alive — by pointing one name at a rapidly-rotating pool of compromised hosts with tiny TTLs.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">DGA</span><span class="d">Machine-minted names: high character entropy, few vowels, long consonant runs, no dictionary meaning. They don't have to be registered to be suspicious — the <em>shape</em> gives them away, and a flood of <code>NXDOMAIN</code> from one host as it probes candidates is the corroborator (Lab 4's R4).</span></div>
+    <div class="r"><span class="lab">fast-flux</span><span class="d">One name → many IPs, swapped every few minutes (low TTL) across many networks (ASNs) and countries, with no single owner. A legitimate CDN also returns many IPs — but from <em>one</em> operator's ASN. The tell is dispersion + churn, not count.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — score a domain</div>
+  <h2>Does this name look machine-made?</h2>
+  <p class="lede">Type a domain or pick one. The scorer measures the second-level label live — Shannon entropy, vowel ratio, longest consonant run, length, digit ratio, dictionary hits — and classifies it. No lookup, no registration check: pure shape.</p>
+  <label for="dom">domain</label>
+  <input type="text" id="dom" value="kq3v9z7wv1nxk.biz" oninput="scoreDom()" autocomplete="off" spellcheck="false">
+  <div class="chips">
+    <button class="chip" onclick="setDom('google.com')">google.com</button>
+    <button class="chip" onclick="setDom('microsoft.com')">microsoft.com</button>
+    <button class="chip" onclick="setDom('kq3v9z7wv1nxk.biz')">DGA · numeric</button>
+    <button class="chip" onclick="setDom('xjdlwpqmzforu.info')">DGA · consonant</button>
+    <button class="chip" onclick="setDom('cdn-prod-edge-use1.net')">CDN host</button>
+    <button class="chip" onclick="setDom('slendercoffeeplant.top')">dictionary-DGA</button>
+  </div>
+  <div class="metrics" id="metrics"></div>
+  <div class="dgaverdict" id="dgaverdict"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">03 — watch it resolve</div>
+  <h2>Fast-flux vs. a CDN</h2>
+  <p class="lede">Two domains, each resolved repeatedly over three minutes. Both return a lot of IPs — so counting isn't enough. Run it: the detector scores <b>dispersion</b> (distinct ASNs and countries) and <b>churn</b> (TTL, new IPs per window). The C2 scatters across unrelated networks; the CDN stays inside one operator.</p>
+  <div class="controls">
+    <button class="btn" id="fluxBtn" onclick="runFlux()">▶ resolve over 3 min</button>
+    <button class="btn ghost" onclick="resetFlux()">reset</button>
+  </div>
+  <div class="flux" id="flux"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>Where shape stops being enough</h2>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Dictionary DGAs dodge entropy.</b> Some families (Suppobox, Gozi variants) stitch real words together — low entropy, pronounceable, and they sail past a character-shape rule. That's the <code>REVIEW</code> verdict above: you escalate to n-gram improbability, registration age (newly-registered-domain feeds), and whether anyone else on earth ever resolved it.</li>
+    <li><b style="color:var(--fg)">Encrypted DNS hides the questions.</b> DoH/DoT move resolution inside HTTPS to a third party, so the on-network view of queries disappears. Detection shifts to the endpoint resolver logs and to the TLS metadata — another case of the signal moving a layer when one layer goes dark (cf. Lab 4B's SSH boundary).</li>
+    <li><b style="color:var(--fg)">The internet is full of weird names.</b> CDNs, hashed asset hosts, and tracking domains look algorithmic. Shape alone over-alerts; you weight it with NXDOMAIN bursts, first-seen/registration age, and reputation before it becomes a finding.</li>
+    <li><b style="color:var(--fg)">Count ≠ flux.</b> Large services return huge IP pools legitimately. Fast-flux is specifically <em>dispersion across unrelated ASNs with churn</em> — allowlist the big CDNs by ASN/owner and alert on the rest.</li>
+  </ul>
+  <p class="lede" style="margin-top:.6rem">A DGA hit or a flux domain is a lead; joined to a beaconing process (Lab 4) and a timeline (Lab 7), it's a C2 channel with a name.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">research</span>
+        <b>Yadav et al.</b> (2010). Detecting Algorithmically Generated Malicious Domain Names. <em>ACM IMC</em>.<br>
+        <b>Antonakakis et al.</b> (2012). From Throw-Away Traffic to Bots: Detecting the Rise of DGA-Based Malware (Pleiades). <em>USENIX Security</em>.<br>
+        <b>Plohmann et al.</b> (2016). A Comprehensive Measurement Study of Domain Generating Malware. <em>USENIX Security</em>.<br>
+        <b>Holz et al.</b> (2008). Measuring and Detecting Fast-Flux Service Networks. <em>NDSS</em>.
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">mapping &amp; lab</span>
+        <b>MITRE ATT&amp;CK</b> — Dynamic Resolution: DGA <code>T1568.002</code>, Fast Flux DNS <code>T1568.001</code>; DNS exfiltration ties to <code>T1071.004</code>.<br>
+        this lab: <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a><br>
+        Extends <a href="lab4.html">Lab 4</a> (R4 DNS tunneling) and feeds <a href="lab7.html">Lab 7</a>.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 13 — threat-intel pivots: turning one indicator into the adversary's whole infrastructure.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 12 · DNS / DGA · the names look wrong and the resolution behaves wrong — both measurable without decryption · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var DICT=["slender","coffee","plant","cloud","front","secure","login","update","mail","prod","edge","google","microsoft","news","shop","data","host","apple","amazon","online"];
+  function entropy(s){var f={},n=s.length,i;if(!n)return 0;for(i=0;i<n;i++)f[s[i]]=(f[s[i]]||0)+1;var h=0;for(var k in f){var p=f[k]/n;h-=p*Math.log2(p);}return h;}
+  function vowelRatio(s){return s.length?(s.match(/[aeiou]/gi)||[]).length/s.length:0;}
+  function maxCons(s){var m=0,c=0;for(var i=0;i<s.length;i++){if(/[bcdfghjklmnpqrstvwxyz]/i.test(s[i])){c++;if(c>m)m=c;}else c=0;}return m;}
+  function digitRatio(s){return s.length?(s.match(/[0-9]/g)||[]).length/s.length:0;}
+  function dictHits(s){var n=0;DICT.forEach(function(w){if(s.toLowerCase().indexOf(w)>=0)n++;});return n;}
+  function isToken(t){return t.length<=6 || DICT.indexOf(t.toLowerCase())>=0 || /^[a-z]+\d+$/i.test(t);}
+
+  function metric(k,v,cls){return '<div class="met '+(cls||"")+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';}
+  window.setDom=function(d){ document.getElementById("dom").value=d; scoreDom(); };
+  window.scoreDom=function(){
+    var raw=document.getElementById("dom").value.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'');
+    var sld=raw.split('.')[0]||"";
+    var tokens=sld.split('-'), flat=sld.replace(/-/g,'');
+    var e=entropy(flat),vr=vowelRatio(flat),mcr=maxCons(flat),dr=digitRatio(flat),dh=dictHits(flat),len=flat.length;
+    var pts=0; if(e>=3.5)pts++; if(vr<0.30)pts++; if(mcr>=4)pts++; if(len>=12)pts++; if(dr>=0.15)pts++;
+    var structured=tokens.length>=2 && tokens.every(isToken);
+    document.getElementById("metrics").innerHTML=
+      metric("entropy",e.toFixed(2)+" b",e>=3.5?"hi":"")+
+      metric("vowel ratio",(vr*100).toFixed(0)+"%",vr<0.30?"hi":"lo")+
+      metric("consonant run",mcr,mcr>=4?"hi":"")+
+      metric("length",len,len>=12?"hi":"")+
+      metric("digits",(dr*100).toFixed(0)+"%",dr>=0.15?"hi":"")+
+      metric("dict words",dh,dh>=1?"lo":"");
+    var el=document.getElementById("dgaverdict"), cls, txt, sub;
+    if(!flat){ el.className="dgaverdict benign"; el.innerHTML="—"; return; }
+    if(structured && pts<3){ cls="benign"; txt="BENIGN · structured host";
+      sub="Hyphen-tokenized known/short labels — the shape of CDN and infrastructure naming. Allowlist by owner."; }
+    else if(pts>=3){ cls="dga"; txt="LIKELY DGA ("+pts+"/5 flags)";
+      sub="High-entropy, low-vowel, machine-shaped. Corroborate with an NXDOMAIN burst from the querying host and a newly-registered-domain check."; }
+    else if(tokens.length===1 && dh>=3 && len>=16){ cls="review"; txt="REVIEW · dictionary-DGA pattern";
+      sub="Real words, random combination — low entropy defeats the shape rule. Escalate to n-gram improbability + registration age."; }
+    else { cls="benign"; txt="BENIGN · pronounceable"; sub="Reads like a human-chosen name; shape metrics are within normal range."; }
+    el.className="dgaverdict "+cls; el.innerHTML=txt+'<span class="sub">'+sub+'</span>';
+  };
+
+  // ---- fast-flux ----
+  var FLUX=[
+    {dom:"n7k2fzqx.webredirect.xyz",ttl:120,ips:[
+      {ip:"185.220.101.47",asn:"AS205100 FR",o:"hosting-a"},{ip:"45.133.1.9",asn:"AS49981 RU",o:"hosting-b"},
+      {ip:"103.224.182.7",asn:"AS63018 US",o:"hosting-c"},{ip:"91.219.236.18",asn:"AS58271 UA",o:"hosting-d"},
+      {ip:"193.42.33.90",asn:"AS200019 NL",o:"hosting-e"},{ip:"5.188.206.14",asn:"AS49981 RU",o:"hosting-b"},
+      {ip:"141.98.11.2",asn:"AS209605 LT",o:"hosting-f"},{ip:"23.94.12.55",asn:"AS36352 US",o:"hosting-g"}]},
+    {dom:"assets.bigcdn.com",ttl:300,ips:[
+      {ip:"104.18.2.10",asn:"AS13335 Cloudflare",o:"cloudflare"},{ip:"104.18.3.10",asn:"AS13335 Cloudflare",o:"cloudflare"},
+      {ip:"172.64.1.20",asn:"AS13335 Cloudflare",o:"cloudflare"},{ip:"172.64.2.20",asn:"AS13335 Cloudflare",o:"cloudflare"},
+      {ip:"104.16.9.5",asn:"AS13335 Cloudflare",o:"cloudflare"},{ip:"104.16.10.5",asn:"AS13335 Cloudflare",o:"cloudflare"}]}
+  ];
+  function renderFlux(run){
+    document.getElementById("flux").innerHTML=FLUX.map(function(f){
+      var asns={},owners={},c; f.ips.forEach(function(x){asns[x.asn.split(' ')[0]]=1;owners[x.o]=1;});
+      var nASN=Object.keys(asns).length, nOwn=Object.keys(owners).length;
+      var flux = run && (f.ips.length>=5 && nASN>=3 && nOwn>=3 && f.ttl<=300);
+      var cls="fx"+(run?(flux?" flag":" ok"):"");
+      var rows=f.ips.map(function(x){return '<div class="ip"><span>'+x.ip+'</span><span class="asn">'+x.asn+'</span></div>';}).join("");
+      var fv=run?('<div class="fv">'+(flux
+        ? 'FAST-FLUX — '+f.ips.length+' IPs across '+nASN+' ASNs / '+nOwn+' owners, TTL '+f.ttl+'s. Dispersion + churn, no single operator.'
+        : 'benign — '+f.ips.length+' IPs but all AS13335 (one operator). CDN scale, not flux.')+'</div>'):'';
+      return '<div class="'+cls+'"><h4>'+f.dom+'</h4><div class="ttl">TTL '+f.ttl+'s · '+f.ips.length+' IPs seen in 3 min</div>'+rows+fv+'</div>';
+    }).join("");
+  }
+  window.resetFlux=function(){ renderFlux(false); };
+  window.runFlux=function(){ renderFlux(true); };
+
+  scoreDom(); renderFlux(false);
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

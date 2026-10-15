@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 7 — Evidence Timeline</title>
+<meta name="description" content="Correlate the scattered findings of Labs 1-6 onto one time axis, join them to one actor, and record the case as a hash-chained, tamper-evident evidence spine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  /* timeline */
+  .tl{position:relative;margin:6px 0 0;padding-left:20px}
+  .tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .ev{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:10px 12px;margin:0 0 8px;min-width:0;transition:.18s}
+  .ev::before{content:"";position:absolute;left:-18px;top:16px;width:9px;height:9px;border-radius:50%;background:var(--faint);border:2px solid var(--bg)}
+  .ev .hd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;font-family:var(--mono);font-size:.8rem}
+  .ev .t{color:var(--faint);font-size:.74rem}
+  .ev .src{font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--muted)}
+  .ev .ttl{color:var(--fg);font-weight:600}
+  .ev .dt{font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-top:4px}
+  .ev .pk{font-family:var(--mono);font-size:.68rem;color:var(--faint);margin-top:3px}
+  .ev.joined{border-color:var(--crit);background:#180f10}
+  .ev.joined::before{background:var(--crit)}
+  .ev.excluded{opacity:.5}
+  .ev.excluded::before{background:var(--good)}
+  .ev .mitre{font-family:var(--mono);font-size:.64rem;color:var(--viol);margin-top:4px}
+  /* case panel */
+  .case{border:1px solid var(--crit);border-radius:12px;background:#140d0e;padding:16px;margin-top:14px}
+  .case h3{font-family:var(--mono);font-size:.95rem;color:var(--fg);margin:0 0 2px}
+  .case .meta{font-family:var(--mono);font-size:.74rem;color:var(--faint);margin-bottom:10px}
+  .conf{height:9px;border-radius:99px;background:#2a1414;overflow:hidden;margin:8px 0 4px}
+  .conf i{display:block;height:100%;background:linear-gradient(90deg,var(--amber),var(--crit))}
+  .conflab{font-family:var(--mono);font-size:.74rem;color:var(--amber)}
+  .story{list-style:none;margin:10px 0 0;padding:0;counter-reset:s}
+  .story li{font-family:var(--mono);font-size:.78rem;color:var(--muted);padding:5px 0 5px 26px;position:relative;border-top:1px dashed var(--line)}
+  .story li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:5px;width:17px;height:17px;border-radius:50%;background:var(--crit);color:#160709;font-size:.64rem;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .story li b{color:var(--fg);font-weight:600}
+  /* hash chain */
+  .chain{display:grid;gap:8px;margin-top:6px}
+  .lnk{border:1px solid var(--line);border-radius:9px;background:var(--panel-2);padding:9px 12px;font-family:var(--mono);font-size:.76rem;min-width:0;overflow:hidden}
+  .lnk .r1{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .lnk .idx{color:var(--cyan)} .lnk .ev{all:unset;color:var(--fg)}
+  .lnk .h{color:var(--good);word-break:break-all}
+  .lnk .prev{color:var(--faint);font-size:.68rem;word-break:break-all}
+  .lnk.broken{border-color:var(--crit);background:#180f10}
+  .lnk.broken .h{color:var(--crit)}
+  .lnk.tampered{border-color:var(--amber)}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html" class="cur">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 7 · detection engineering · the case</div>
+    <h1>Scattered signals, <span class="cy">one story</span>.</h1>
+    <p class="sub">Each lab so far found one thing. A real incident is all of them at once — a persistence entry here, an injected page there, a beacon, a lateral push — arriving from different sensors, out of order, buried in noise. This is where a detection engineer earns the title: put every finding on one axis, join the ones that belong to the same actor, and write it down so the record can't be quietly changed. A finding is a question; a correlated, time-ordered, tamper-evident case is an answer.</p>
+    <div class="banner"><b>Assembly, not conviction.</b> The timeline drafts a case for a human to confirm. Attribution stays <code>id-match</code> until independently verified; an automated draft never declares <code>confirmed</code> and never triggers containment on its own. Vertical is the hand-checked ground truth; Horizontal only drafts.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the join</div>
+  <h2>One actor, six sensors</h2>
+  <p class="lede">The thread that stitches findings together is identity. Every event the lab normalizes carries a <code>proc_key</code> = <code>host : pid : proc_start</code> — stable even when PIDs recycle. Findings that share a <code>proc_key</code> are the same process seen by different instruments; findings on the same host in a tight window are <em>related</em> and worth corroboration. Correlation is cheap to assert and easy to get wrong, so the rule is strict: agreement across <b>independent</b> sensors raises confidence; a single loud alert does not.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — correlate the day</div>
+  <h2>From alert stream to case</h2>
+  <p class="lede">Raw findings from one morning, newest techniques mixed with benign noise. Correlate them: events sharing the implant's <code>proc_key</code> fuse into one ordered case with rising confidence and ATT&amp;CK tags; the allowlisted telemetry beacon is left out, because belonging to the story has to be earned.</p>
+  <div class="controls">
+    <button class="btn" id="corrBtn" onclick="correlate()">▶ correlate into a case</button>
+    <button class="btn ghost" onclick="resetTl()">reset</button>
+  </div>
+  <div class="tl" id="tl"></div>
+  <div id="casebox"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the evidence spine</div>
+  <h2>A record that can't be quietly edited</h2>
+  <p class="lede">A case is only worth as much as its integrity. The lab's evidence notebook (the <code>.vbook</code>) is append-only and hash-chained: each entry stores the hash of the one before it, so every entry's hash depends on the entire history behind it. Change any past entry and every hash downstream stops matching — tampering isn't prevented, it's made <em>undeniable</em>. Try it: tamper with entry 2.</p>
+  <div class="controls">
+    <button class="btn" id="tamperBtn" onclick="toggleTamper()">✎ tamper with entry 2</button>
+    <button class="btn ghost" onclick="verifyChain()">↻ verify chain</button>
+    <span class="conflab" id="chainState"></span>
+  </div>
+  <div class="chain" id="chain"></div>
+  <p class="mono" style="font-size:.72rem;color:var(--faint);margin-top:9px">Illustrative 32-bit digests for display; the real spine chains SHA-256. The property is the same — <code>h(entry) = H(prev_hash ‖ entry)</code>, so the final root hash authenticates the whole history.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>The ways a timeline lies</h2>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Correlation isn't causation.</b> Two events sharing a <code>proc_key</code> are genuinely the same process; two merely close in time are not necessarily related. The timeline proposes; a human disposes. Every auto-draft is a hypothesis, labelled as one.</li>
+    <li><b style="color:var(--fg)">Clocks disagree.</b> Network sensor, endpoint, and SIEM each stamp time differently, and skew reorders events. The lab records each source's own clock and normalizes, but a 2-second truth can't be read off a 5-second skew — order near the edges stays uncertain, and the case says so.</li>
+    <li><b style="color:var(--fg)">Attribution is provisional.</b> A draft marks links <code>id-match</code> — joined by identifier — never <code>confirmed</code>. Confirmation needs a second independent witness and a human. Horizontal drafts; Vertical, hand-checked, is the ground truth the drafts are measured against.</li>
+    <li><b style="color:var(--fg)">A story is seductive.</b> Once a narrative forms, every new event seems to fit it. The discipline is to keep the excluded and the contradicting evidence <em>in</em> the record — the allowlisted beacon stays visible as "considered and dropped," not deleted.</li>
+  </ul>
+  <p class="lede" style="margin-top:.6rem">The payoff of the whole series: seven instruments, each honest about its blind spot, converging on one defensible account — recorded so that account can be trusted later, by someone who wasn't there.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">this lab</span>
+        <b>Vertical</b> — the offline, hand-checked evidence notebook (<code>.vbook</code>, hash-chained).<br>
+        <b>Horizontal</b> — the automated case-drafting tracer; links stay <code>id-match</code> until confirmed.<br>
+        <code>proc_key = host:pid:proc_start</code> — the normalizer's join key.<br>
+        <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">references</span>
+        <b>MITRE ATT&amp;CK</b> — the technique vocabulary the story is told in (T1547, T1055, T1014, T1071, T1021).<br>
+        <b>Sigma</b> — detection-as-code, the portable rule format.<br>
+        <b>NIST SP 800-61r2</b> — Computer Security Incident Handling Guide (the IR lifecycle).<br>
+        <b>Merkle</b> (1979) / hash chaining — tamper-evident append-only logs.<br>
+        <b>SHA-256</b> — FIPS 180-4.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">The series, closed:</b> <a href="lab1.html">persistence</a> · <a href="lab2.html">hooks</a> · <a href="lab3.html">cross-view</a> · <a href="lab4.html">C2</a> · <a href="lab4b.html">stream integrity</a> · <a href="lab5.html">wire signatures</a> · <a href="lab6.html">memory</a> — and here, the case that holds them. <b>Next:</b> Lab 8 — the NOP sled, end to end.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 7 · evidence timeline · correlate by identity, confirm by hand, record so it can't be quietly changed</div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var PK="host-a:4210:17b3";          // the implant's proc_key
+  // one morning of findings (chronological)
+  var EV=[
+    {t:"09:30:14",src:"L4",lab:"beacon",pk:"host-a:980:0c21",join:false,
+     ttl:"periodic check-in → graph.microsoft.com", mitre:"benign · allowlisted telemetry",
+     dt:"CV 0.004, but destination is known-good. Considered, dropped — kept visible, not deleted."},
+    {t:"09:41:02",src:"L1",lab:"persistence",pk:PK,join:true,
+     ttl:"LaunchAgent / Run-key added", mitre:"ATT&CK T1547 — Boot/Logon Autostart",
+     dt:"New autostart entry written by pid 4210's lineage. Survives reboot (Lab 1)."},
+    {t:"09:41:05",src:"L6",lab:"memory",pk:PK,join:true,
+     ttl:"private RWX region + MZ header in rundll32 (pid 4210)", mitre:"ATT&CK T1055 — Process Injection",
+     dt:"malfind: executable, private, unbacked; carries a NOP sled + MZ (Lab 6)."},
+    {t:"09:41:06",src:"L2",lab:"hook",pk:PK,join:true,
+     ttl:"SSDT entry resolves outside ntoskrnl", mitre:"ATT&CK T1014 — Rootkit",
+     dt:"Call-table pointer lands in the unbacked region above (Lab 2)."},
+    {t:"09:41:58",src:"L4",lab:"beacon",pk:PK,join:true,
+     ttl:"pid 4210 → 185.220.101.47 every ~60s", mitre:"ATT&CK T1071 — C2 channel",
+     dt:"CV 0.018 to an unknown host — metronome check-in (Lab 4)."},
+    {t:"09:42:10",src:"L5",lab:"wire",pk:PK,join:true,
+     ttl:"ISystemActivator + MEOW + sled → :135", mitre:"ATT&CK T1021 — Lateral Movement",
+     dt:"Signature match on an outbound DCOM activation — the box is now the attacker (Lab 5)."},
+    {t:"09:43:00",src:"L3",lab:"cross-view",pk:"host-a:6620:4e90",join:true,related:true,
+     ttl:"svch0st.exe (pid 6620) in psscan, not pslist", mitre:"ATT&CK T1014 — Rootkit (hidden process)",
+     dt:"Different proc_key, same host, tight window → related. Needs corroboration, not assumed (Lab 3/6)."}
+  ];
+  function render(correlated){
+    var host=document.getElementById("tl"), html="";
+    EV.forEach(function(e,i){
+      var cls="ev";
+      if(correlated){ cls+= (e.join? " joined" : " excluded"); }
+      html+='<div class="'+cls+'" id="ev'+i+'">'+
+        '<div class="hd"><span class="t">'+e.t+'</span><span class="src">'+e.src+'</span><span class="ttl">'+e.ttl+'</span></div>'+
+        '<div class="dt">'+e.dt+'</div>'+
+        '<div class="mitre">'+e.mitre+(e.related?' · related (not same proc_key)':'')+'</div>'+
+        '<div class="pk">'+e.pk+'</div></div>';
+    });
+    host.innerHTML=html;
+  }
+  window.resetTl=function(){ render(false); document.getElementById("casebox").innerHTML=""; };
+  window.correlate=function(){
+    render(true);
+    var joined=EV.filter(function(e){return e.join;});
+    var same=joined.filter(function(e){return e.pk===PK;});
+    var related=joined.filter(function(e){return e.pk!==PK;});
+    // confidence: independent sensor sources agreeing on the primary proc_key
+    var srcs={}; same.forEach(function(e){srcs[e.src]=1;});
+    var nSrc=Object.keys(srcs).length;
+    var conf=Math.min(96, 30+nSrc*13);     // caps below 100 — human confirmation required
+    var steps=same.slice().sort(function(a,b){return a.t<b.t?-1:1;});
+    var html='<div class="case"><h3>CASE DAYBREAK-001 · host-a · '+PK+'</h3>'+
+      '<div class="meta">'+same.length+' findings on one proc_key across '+nSrc+' independent sensors · '+related.length+' related · 1 excluded (allowlisted)</div>'+
+      '<div class="conf"><i style="width:'+conf+'%"></i></div>'+
+      '<div class="conflab">confidence '+conf+'% · status: <b style="color:var(--amber)">DRAFT — confirmation required</b> (id-match, not confirmed)</div>'+
+      '<ol class="story">';
+    steps.forEach(function(e){ html+='<li><b>'+e.t+'</b> — '+e.ttl+'<br><span style="color:var(--faint)">'+e.mitre+'</span></li>'; });
+    related.forEach(function(e){ html+='<li style="border-color:var(--amber-dim)"><b>'+e.t+'</b> — '+e.ttl+' <span style="color:var(--amber)">· related, pending corroboration</span></li>'; });
+    html+='</ol>'+
+      '<div class="mono" style="font-size:.72rem;color:var(--faint);margin-top:10px">Horizontal drafted this from id-matches. A human (via Vertical) confirms before any containment. The excluded 09:30 beacon stays in the record as "considered and dropped."</div></div>';
+    document.getElementById("casebox").innerHTML=html;
+  };
+
+  // ---- hash-chained evidence spine (illustrative 32-bit digest) ----
+  function fnv(s){ var h=0x811c9dc5>>>0; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return ("00000000"+h.toString(16)).slice(-8); }
+  var ENTRIES=[
+    "case-open DAYBREAK-001 host-a",
+    "T1547 persistence LaunchAgent pid4210",
+    "T1055 inject rundll32 private-RWX+MZ",
+    "T1071 beacon 185.220.101.47 cv0.018",
+    "T1021 lateral DCOM MEOW+sled :135"
+  ];
+  var tampered=false;
+  function chainHashes(entries){
+    var prev="00000000", out=[];
+    for(var i=0;i<entries.length;i++){ var h=fnv(prev+"|"+entries[i]); out.push({prev:prev,h:h}); prev=h; }
+    return out;
+  }
+  var ANCHOR=chainHashes(ENTRIES).map(function(x){return x.h;});  // the published, trusted chain
+  function renderChain(){
+    var cur=ENTRIES.slice();
+    if(tampered) cur[1]="T1547 persistence LaunchAgent pid9999";  // altered entry 2 (index 1)
+    var ch=chainHashes(cur), host=document.getElementById("chain"), html="", broke=false;
+    for(var i=0;i<ch.length;i++){
+      var mismatch = ch[i].h!==ANCHOR[i];
+      if(mismatch) broke=true;
+      var cls="lnk"+(mismatch?" broken":"")+(tampered&&i===1?" tampered":"");
+      html+='<div class="'+cls+'"><div class="r1"><span class="idx">entry '+i+(tampered&&i===1?' ✎ altered':'')+'</span>'+
+            '<span class="h">'+ch[i].h+(mismatch?' ✗':' ✓')+'</span></div>'+
+            '<div class="ev">'+cur[i]+'</div>'+
+            '<div class="prev">prev '+ch[i].prev+'</div></div>';
+    }
+    document.getElementById("chain").innerHTML=html;
+    var st=document.getElementById("chainState");
+    if(!tampered){ st.innerHTML='<span style="color:var(--good)">chain intact · root '+ANCHOR[ANCHOR.length-1]+'</span>'; }
+    else { st.innerHTML='<span style="color:var(--crit)">TAMPER DETECTED · entries 2+ diverge · root hash no longer matches</span>'; }
+  }
+  window.toggleTamper=function(){ tampered=!tampered; renderChain(); };
+  window.verifyChain=function(){ renderChain(); };
+
+  render(false); renderChain();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

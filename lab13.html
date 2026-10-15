@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 13 — The Lantern Rotation</title>
+<meta name="description" content="A long intrusion is a relay of humans on one access. The psychological kill chain and how an operator handoff leaves a detectable behavioral seam.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  /* psych kill chain stepper */
+  .stages{display:grid;gap:8px;margin-top:.4rem}
+  .stage{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:11px 13px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;min-width:0}
+  .stage .n{font-family:var(--mono);font-size:.72rem;color:#160709;background:var(--amber);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .stage.rot .n{background:var(--crit);color:#160709}
+  .stage .ti{font-family:var(--mono);font-size:.84rem;color:var(--fg);font-weight:600}
+  .stage .ds{font-size:.84rem;color:var(--muted);margin:.2rem 0 0}
+  .stage .tell{font-family:var(--mono);font-size:.72rem;color:var(--cyan);margin-top:5px}
+  .stage.rot .tell{color:var(--crit)}
+  /* drift timeline */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .drift{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:14px 12px;overflow-x:auto}
+  .dgrid{min-width:520px}
+  .drow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center;margin-bottom:9px}
+  .drow .rl{font-family:var(--mono);font-size:.7rem;color:var(--muted);text-align:right}
+  .cells{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;position:relative}
+  .cells .c{height:20px;border-radius:2px;background:#0c1620;border:1px solid transparent}
+  .opband{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;margin:2px 0 0}
+  .opband .c{height:7px;border-radius:2px}
+  .opA{background:var(--cyan-dim)} .opB{background:#5a3a3a}
+  .axis{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;font-family:var(--mono);font-size:.56rem;color:var(--faint);margin-top:3px}
+  .axis span{text-align:center}
+  .seamline{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--crit);box-shadow:0 0 8px var(--crit)}
+  .verdict{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;margin-top:12px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7}
+  .verdict .big{font-weight:600;font-size:.9rem} .verdict .crit{color:var(--crit)} .verdict .ok{color:var(--good)}
+  .leg{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:.7rem;color:var(--faint);margin-top:9px}
+  .leg span{display:inline-flex;align-items:center;gap:6px} .leg i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  .coin{border:1px solid var(--amber-dim);background:#1a1407;border-radius:10px;padding:11px 14px;margin:1rem 0 0;font-family:var(--mono);font-size:.76rem;color:var(--muted)}
+  .coin b{color:var(--amber)}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html" class="cur">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 13 · threat intelligence · the human layer</div>
+    <h1>The <span class="cy">Lantern Rotation</span>.</h1>
+    <p class="sub">The classic kill chain tracks an <em>actor</em>. But a six-month intrusion is not one person — it's a shift rotation. The operator tires; his tooling becomes known even to his own team; his position goes dark. So he passes the access shell to a teammate and steps out of the vigil, and a fresh hand picks up the lantern and carries the campaign on. The access persists; the human is the variable. And the human has a pulse — working hours, habits, discipline, tooling — that <b>changes when the hand changes</b>. That change is a seam, and a seam is something you can see.</p>
+    <div class="banner"><b>Analysis only.</b> This models the adversary's <em>human factors</em> so a defender can detect and reason about them. It is not a playbook for conducting operations and teaches no operator tradecraft — only how operator behaviour leaks into your telemetry.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the psychological kill chain</div>
+  <h2>The operator's arc, and what each stage leaks</h2>
+  <p class="lede">Overlay a human lifecycle on the intrusion. Each state of the operator leaves a different tell in the logs — and the last one, the rotation, is the loudest.</p>
+  <div class="stages">
+    <div class="stage"><span class="n">1</span><div><div class="ti">Fresh entry</div><div class="ds">A new hand on the keyboard is careful and slow, minimizing noise while learning unfamiliar terrain.</div><div class="tell">tell: low error rate, heavy reconnaissance of the environment</div></div></div>
+    <div class="stage"><span class="n">2</span><div><div class="ti">Establishment</div><div class="ds">Persistence and C2 go in; the operator settles into a toolset.</div><div class="tell">tell: a stable tooling / C2 fingerprint forms</div></div></div>
+    <div class="stage"><span class="n">3</span><div><div class="ti">Routine</div><div class="ds">Steady cadence, consistent working hours — a human rhythm you can baseline.</div><div class="tell">tell: a predictable active-hours window (their timezone)</div></div></div>
+    <div class="stage"><span class="n">4</span><div><div class="ti">Fatigue</div><div class="ds">Boredom and overfamiliarity breed shortcuts; discipline slips.</div><div class="tell">tell: OPSEC error rate climbs, tooling reused carelessly</div></div></div>
+    <div class="stage"><span class="n">5</span><div><div class="ti">Exposure</div><div class="ds">The tradecraft is now known — to defenders, and to the operator's own team, which is the cue to rotate.</div><div class="tell">tell: over-used indicators, signatures catching up</div></div></div>
+    <div class="stage rot"><span class="n">6</span><div><div class="ti">Handoff &mdash; the Lantern Rotation</div><div class="ds">The access shell passes to a fresh operator. A new human inherits the terrain and starts the arc over.</div><div class="tell">tell: a discontinuity &mdash; working hours jump (new timezone), OPSEC snaps back to careful, the &ldquo;known&rdquo; environment gets re-reconned, tooling swaps</div></div></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — spot the rotation</div>
+  <h2>One access, twenty-four weeks, two hands</h2>
+  <p class="lede">Behavioural telemetry for a single persistent access over six months: the operator's active-hours window, OPSEC error rate, and re-reconnaissance volume, week by week. Somewhere in here the lantern was passed. Run the drift analysis — it scores week-over-week discontinuity and marks the seam.</p>
+  <div class="controls">
+    <button class="btn" id="anBtn" onclick="analyze()">▶ analyze behavioural drift</button>
+    <button class="btn ghost" onclick="resetDrift()">reset</button>
+  </div>
+  <div class="drift"><div class="dgrid" id="dgrid"></div></div>
+  <div class="leg" aria-hidden="true">
+    <span><i style="background:var(--cyan-dim)"></i>operator A (inferred)</span>
+    <span><i style="background:#5a3a3a"></i>operator B (inferred)</span>
+    <span><i style="background:var(--crit)"></i>handoff seam</span>
+  </div>
+  <div class="verdict" id="verdict">Run the analysis to find the handoff.</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the payoff &amp; the hard part</div>
+  <h2>Your &ldquo;actor&rdquo; is a relay</h2>
+  <p class="lede">The reason this matters isn't trivia — it corrects a mistake defenders make constantly: collapsing a long campaign into one persona.</p>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Attribution honesty.</b> A six-month &ldquo;APT29 operator&rdquo; in your timeline is almost certainly several humans. Treating them as one averages away the very discontinuities that are your best evidence — and your best detection windows. This sharpens <a href="lab7.html">Lab 7</a>: an actor vertex is a <em>team</em>, not a person.</li>
+    <li><b style="color:var(--fg)">The seam is where mistakes live.</b> A fresh operator re-learns the environment and makes the errors a veteran wouldn't. The handoff is the single best moment to catch the campaign — if you're watching for the discontinuity instead of smoothing over it.</li>
+    <li><b style="color:var(--fg)">Drift is not always a handoff.</b> The same operator learns the network, automates, and shifts hours too. Benign drift is <em>gradual</em>; a rotation is a <em>step</em>. One discontinuity is a lead, not a conviction.</li>
+    <li><b style="color:var(--fg)">Hands can be hidden.</b> A disciplined team standardizes tooling and hours to erase the seam, and timezones can be spoofed. Behavioural biometrics are noisy and ethically fraught. You weight this signal; you never rest a case on it alone.</li>
+  </ul>
+  <div class="coin"><b>On the name.</b> &ldquo;The Lantern Rotation&rdquo; and this &ldquo;psychological kill chain&rdquo; framing are an original synthesis of this lab &mdash; a lens laid over the established Cyber Kill Chain and Diamond Model, not a standard industry framework. Offered to the <em>Vulpes Vigil</em> journal as a contribution, cited honestly as new. &mdash; 3XC</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">foundations extended</span>
+        <b>Hutchins, Cloppert &amp; Amin</b> (2011). Intelligence-Driven Computer Network Defense (the Cyber Kill Chain). Lockheed Martin.<br>
+        <b>Caltagirone, Pendergast &amp; Betz</b> (2013). The Diamond Model of Intrusion Analysis &mdash; the <em>adversary</em> vertex (operator vs. persona).<br>
+        <b>MITRE ATT&amp;CK</b> &mdash; the behaviours a rotating team expresses over a campaign.
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">this lab</span>
+        The <em>Lantern Rotation</em> / psychological kill chain &mdash; a BlueKit BlueChain synthesis for the <em>Vulpes Vigil</em> journal.<br>
+        <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a><br>
+        Refines <a href="lab7.html">Lab 7</a> (attribution) and reads the human layer under <a href="lab4.html">Lab 4</a>'s rhythm.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 14 — threat-intel pivots: turning one indicator into the adversary's whole infrastructure.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 13 · the Lantern Rotation · the access persists, the operator rotates — and the hand that changes leaves a seam · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var W=24, SEAM=15, hour=[],opsec=[],recon=[],tool=[],op=[];
+  for(var w=1;w<=W;w++){
+    if(w<SEAM){ hour.push(2+(((w*7)%3)-1)*0.3); opsec.push(Math.min(7,2+Math.floor(w/2.6))); recon.push(12+((w*5)%7)); tool.push("X"); op.push("A"); }
+    else { var k=w-SEAM; hour.push(13+(((w*7)%3)-1)*0.3); opsec.push(Math.min(6,1+Math.floor(k/3))); recon.push(k===0?92:(k===1?60:14+((w*5)%6))); tool.push("Y"); op.push("B"); }
+  }
+  function drift(i){ // i is 0-based week index
+    if(i===0) return 0;
+    return Math.abs(hour[i]-hour[i-1])/12 + Math.abs(opsec[i]-opsec[i-1])/10 + Math.abs(recon[i]-recon[i-1])/100 + (tool[i]!==tool[i-1]?1:0);
+  }
+  var detected=0;
+  (function(){var best=0;for(var i=1;i<W;i++){var d=drift(i);if(d>best){best=d;detected=i;}}})();
+
+  function cellColor(val,max,hue){ var t=Math.max(0,Math.min(1,val/max)); var a=(0.12+t*0.8).toFixed(2); return 'background:rgba('+hue+','+a+');border-color:rgba('+hue+',.5)'; }
+  function row(label,arr,max,hue){
+    var cells='';
+    for(var i=0;i<W;i++){ var val=(typeof arr[i].toFixed==='function')?arr[i].toFixed(1):arr[i]; cells+='<div class="c" style="'+cellColor(arr[i],max,hue)+'" title="week '+(i+1)+': '+val+'"></div>'; }
+    return '<div class="drow"><div class="rl">'+label+'</div><div class="cells" style="position:relative">'+cells+(analyzed?'<div class="seamline" style="left:calc('+(detected/W*100)+'% - 1px)"></div>':'')+'</div></div>';
+  }
+  var analyzed=false;
+  function render(){
+    var h='';
+    h+=row("active hour (UTC)",hour,24,"67,192,184");
+    h+=row("OPSEC errors",opsec,10,"224,92,92");
+    h+=row("re-recon",recon,100,"232,161,58");
+    // operator band
+    var ob='';for(var i=0;i<W;i++){ var cls = analyzed ? (op[i]==="A"?"opA":"opB") : ""; ob+='<div class="c '+cls+'" style="'+(!analyzed?'background:#141c24':'')+'"></div>'; }
+    h+='<div class="drow"><div class="rl">'+(analyzed?'operator (inferred)':'operator')+'</div><div class="opband" style="position:relative">'+ob+(analyzed?'<div class="seamline" style="left:calc('+(detected/W*100)+'% - 1px)"></div>':'')+'</div></div>';
+    // axis
+    var ax='';for(i=0;i<W;i++){ ax+='<span>'+((i+1)%4===1?('w'+(i+1)):'')+'</span>'; }
+    h+='<div class="drow"><div class="rl"></div><div class="axis">'+ax+'</div></div>';
+    document.getElementById("dgrid").innerHTML=h;
+  }
+  window.resetDrift=function(){ analyzed=false; render(); document.getElementById("verdict").textContent="Run the analysis to find the handoff."; };
+  window.analyze=function(){
+    analyzed=true; render();
+    var wk=detected+1;
+    var hA=hour[0].toFixed(0), hB=hour[W-1].toFixed(0);
+    document.getElementById("verdict").innerHTML=
+      '<div class="big"><span class="crit">HANDOFF DETECTED &mdash; week '+wk+'</span> (the Lantern Rotation)</div>'+
+      '<div>Step discontinuity across every axis at once: active hours jump <b>'+hA+':00&nbsp;&rarr;&nbsp;'+hB+':00 UTC</b> (a ~'+Math.abs(hB-hA)+'h timezone shift), OPSEC errors reset toward zero (a careful new hand), re-recon spikes as the fresh operator re-learns the &ldquo;known&rdquo; environment, and the tooling fingerprint swaps.</div>'+
+      '<div style="margin-top:6px">Reading: one access, <span class="crit">two operators</span>. Weeks 1&ndash;'+(wk-1)+' are operator&nbsp;A on a fatiguing arc; week&nbsp;'+wk+'+ is operator&nbsp;B, fresh. Do not merge them into one persona (cf. Lab 7). The seam is your highest-value detection &amp; attribution window.</div>';
+  };
+  render();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

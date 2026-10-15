@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 15 — Capstone</title>
+<meta name="description" content="One intrusion, worked end to end across all fourteen detection labs — a graded capstone exam with a pass threshold and a completion report.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:900px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(1.8rem,5vw,2.8rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px;max-height:72vh;overflow:auto}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  /* progress */
+  .prog{position:sticky;top:calc(env(safe-area-inset-top,0px) + 52px);z-index:15;background:rgba(10,14,18,.92);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;padding:9px 13px;margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-family:var(--mono);font-size:.78rem}
+  .prog .pc{color:var(--muted)} .prog .sc{color:var(--cyan);font-weight:600}
+  .bar2{flex:1;height:7px;background:#0c1620;border-radius:99px;overflow:hidden;min-width:60px}
+  .bar2 i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--good));width:0;transition:width .3s}
+  /* question cards */
+  .q{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin:12px 0;min-width:0}
+  .q .qh{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+  .q .qn{font-family:var(--mono);font-size:.72rem;color:#160709;background:var(--cyan);border-radius:5px;padding:1px 7px;font-weight:700}
+  .q .ql{font-family:var(--mono);font-size:.68rem;color:var(--faint)}
+  .q .scen{color:var(--fg);margin:.3rem 0 .6rem}
+  .q .scen .ev{font-family:var(--mono);font-size:.86rem;color:var(--amber);background:#05090c;border:1px solid var(--line);border-radius:7px;padding:8px 10px;display:block;margin-top:6px;white-space:pre-wrap;word-break:break-word}
+  .opts{display:grid;gap:6px}
+  .opt{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:pointer;background:var(--panel-2);font-size:.88rem;color:var(--muted);transition:.12s}
+  .opt:hover{border-color:var(--cyan-dim)}
+  .opt input{margin-top:3px;accent-color:var(--cyan)}
+  .opt.sel{border-color:var(--cyan);background:#0c1a1a;color:var(--fg)}
+  .opt.correct{border-color:var(--good);background:#0c1f14;color:var(--fg)}
+  .opt.wrong{border-color:var(--crit);background:#1f0f10;color:var(--fg)}
+  .fb{font-family:var(--mono);font-size:.76rem;margin-top:9px;padding:9px 11px;border-radius:8px;display:none;line-height:1.6}
+  .fb.show{display:block}
+  .fb.ok{background:#0c1f14;color:var(--good);border:1px solid var(--cyan-dim)}
+  .fb.no{background:#1f0f10;color:#ffb3b3;border:1px solid var(--crit)}
+  .fb a{color:var(--cyan)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0}
+  .btn{font-family:var(--mono);font-size:.86rem;cursor:pointer;border-radius:8px;padding:11px 18px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  /* result */
+  .result{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:20px;margin-top:16px;display:none}
+  .result.show{display:block}
+  .result.pass{border-color:var(--good)} .result.fail{border-color:var(--amber-dim)}
+  .result .grade{font-family:var(--mono);font-size:2.4rem;font-weight:700;letter-spacing:-.02em}
+  .result.pass .grade{color:var(--good)} .result.fail .grade{color:var(--amber)}
+  .result .verdict{font-family:var(--mono);font-size:.9rem;font-weight:600;margin:.2rem 0 .6rem}
+  .result .review{font-family:var(--mono);font-size:.8rem;color:var(--muted);line-height:1.8}
+  .result .review a{color:var(--cyan)}
+  .result .cert{border-top:1px dashed var(--line);margin-top:14px;padding-top:12px;font-family:var(--mono);font-size:.78rem;color:var(--faint)}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html" class="cur">Lab 15 · Capstone ★</a></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 15 · graded capstone</div>
+    <h1>Work the <span class="cy">whole case</span>.</h1>
+    <p class="sub">One intrusion — <b>CASE DAYBREAK-07</b>, host <code>host-a</code> — carried from the first autostart entry to the final verdict. Each question is a real decision point from one of the fourteen labs, in attack-chain order. Answer all fifteen, then grade: <b>80% (12/15) passes</b>. This is the exam that proves you can run the chain, not just read about it.</p>
+    <div class="banner"><b>Open-lab exam.</b> Stuck on one? Each answer links back to its lab. This grades your judgment across the whole kill chain — detection, honesty about limits, and the discipline not to over-call.</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="prog"><span class="pc" id="pc">0 / 15 answered</span><span class="bar2"><i id="barfill"></i></span><span class="sc" id="sc"></span></div>
+  <div id="quiz"></div>
+  <div class="controls">
+    <button class="btn" id="gradeBtn" onclick="grade()">▶ grade capstone</button>
+    <button class="btn ghost" onclick="resetQuiz()">reset</button>
+  </div>
+  <div class="result" id="result"></div>
+  <footer>Lab 15 · the capstone · one case, fourteen techniques, one disciplined verdict · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var Q=[
+    {lab:"Lab 1 · boot persistence",href:"lab1.html",
+     scen:"A host is suspected of boot-stage persistence that survives reimaging of the OS partition. What is the sound detection posture?",
+     opts:["Trust Secure Boot — if it booted, the chain is clean","Measure the boot chain and diff each stage against a known-good baseline; treat VBR/firmware persistence claims as things to verify, not assume","Signature-scan the MBR for known bootkits and move on"],correct:1,
+     why:"You measure and baseline the chain (snapshot→boot→hash→rollback). Secure Boot is necessary, not sufficient, and a signature scan only finds the known."},
+    {lab:"Lab 11 · macOS persistence",href:"lab11.html",
+     scen:"A persistence sweep finds a new per-user LaunchAgent:",
+     ev:"label: com.apple.softwareupdate\nprogram: /Users/Shared/.sysupd/update  (unsigned)\nRunAtLoad: true",
+     opts:["Benign — it's the Apple software-update agent","FLAG — it masquerades as Apple, is unsigned, and runs from a hidden Shared path","Ignore — LaunchAgents are always noise"],correct:1,
+     why:"Masquerade + unsigned + hidden path + RunAtLoad is the classic shape. The real agent is Apple-signed and lives in the system domain."},
+    {lab:"Lab 9 · PE triage",href:"lab9.html",
+     scen:"The dropper is invoice.pdf.exe — a valid PE32 with a 1.9 MB high-entropy overlay after the last section and a second embedded MZ.",
+     opts:["A packed but benign installer","A binder/joiner dropper (overlay payload + second PE + double-extension masquerade)","A corrupted download"],correct:1,
+     why:"Overlay + embedded MZ + double extension, unsigned, together = binder. (An overlay alone can be a legit installer — corroborate.)"},
+    {lab:"Lab 6 · memory forensics",href:"lab6.html",
+     scen:"In rundll32.exe, malfind surfaces a committed region that is private, executable, and backed by no file, beginning:",
+     ev:"90 90 90 90 90 90 … 4D 5A 90 00",
+     opts:["A JIT code region — tune it out","An injected PE behind a NOP sled — investigate","A normally mapped DLL"],correct:1,
+     why:"Private + executable + unbacked + MZ/sled has no innocent explanation. A JIT region is attributable to a runtime; this isn't."},
+    {lab:"Lab 8 · NOP sled",href:"lab8.html",
+     scen:"That run of 0x90 (and, in a variant, a run of inc/dec-reg and xchg-eax bytes). What is it, and how do you catch the variant?",
+     opts:["Alignment padding — ignore it","A landing-zone sled; detect by run-length over the NOP-equivalent class, not the literal 0x90","Encryption key material"],correct:1,
+     why:"A sled is a runway for an imprecise jump. A literal 0x90 scan misses register-noise sleds; run-length over the equivalence class catches both."},
+    {lab:"Lab 10 · ROP / JOP",href:"lab10.html",
+     scen:"A crash trace shows several returns landing on addresses not preceded by a call, a stack pointer pivoted into the heap, and no injected code anywhere.",
+     opts:["A false alarm — nothing was injected","A ROP chain — reused code in an illegitimate order; confirm CFI (CET) is enabled and route the #CP fault","A memory leak"],correct:1,
+     why:"No payload is the point: ROP reuses legitimate bytes. The tells are return provenance, shadow-stack divergence, and the stack pivot."},
+    {lab:"Lab 2 · call-table hooks",href:"lab2.html",
+     scen:"An SSDT entry resolves to an address that falls outside the ntoskrnl module range.",
+     opts:["Normal — the OS relocates syscalls","A hook — a call-table pointer redirected into unbacked/foreign memory","A symbol-resolution error"],correct:1,
+     why:"Baseline→resolve→classify: a syscall pointer landing outside the owning module is the hook."},
+    {lab:"Lab 3 · cross-view",href:"lab3.html",
+     scen:"psscan (pool-tag scan) lists svch0st.exe pid 6620; pslist (the linked list) does not.",
+     opts:["It exited between passes — ignore","A hidden/unlinked process — investigate and corroborate (it could still be a scan race)","A Windows bug"],correct:1,
+     why:"Present-low, absent-high is the hidden-object signal. One pass is a question; persistence across passes + other evidence is the conviction."},
+    {lab:"Lab 4 · C2 beaconing",href:"lab4.html",
+     scen:"pid 4210 connects to 185.220.101.47 every ~60 s with a coefficient of variation of 0.018, to a host on no allowlist.",
+     opts:["NTP or an update check — benign","A C2 beacon — metronome-regular check-in to an unknown host","A user refreshing a page"],correct:1,
+     why:"CV < 0.10 to an unknown destination is a beacon. Allowlisted known-good endpoints are excused; this one isn't."},
+    {lab:"Lab 12 · DNS / DGA",href:"lab12.html",
+     scen:"The same process also resolves kq3v9z7wv1nxk.biz — high entropy, no vowels, embedded digits.",
+     opts:["A CDN hostname","A DGA domain — machine-minted, corroborate with an NXDOMAIN burst and registration age","A user typo"],correct:1,
+     why:"High entropy + low vowels + digits = algorithmically generated. Shape is the trigger; NXDOMAIN burst and newly-registered-domain corroborate."},
+    {lab:"Lab 5 · wire signatures",href:"lab5.html",
+     scen:"Outbound to TCP 135 you observe an ISystemActivator bind, a MEOW object reference, a \\\\ UNC path, and a 0x90 sled.",
+     opts:["Normal DCOM/RPC","An MS03-026 (CVE-2003-0352) exploitation attempt — lateral movement; the host is now the attacker","Printer discovery traffic"],correct:1,
+     why:"GUID + MEOW + UNC + sled is the signature. Outbound means your box is now pushing the exploit onward."},
+    {lab:"Lab 4B · stream integrity",href:"lab4b.html",
+     scen:"Data left the host over SCP inside SSH. From the network capture alone, can you prove what was exfiltrated?",
+     opts:["Yes — decrypt the SSH session","No — a passive sensor sees only metadata; prove content via endpoint correlation (EDR hashes the file)","Yes — reconstruct it exactly from packet sizes"],correct:1,
+     why:"The honest boundary: encrypted transport yields metadata, not plaintext. Content proof comes from the endpoint, not the wire."},
+    {lab:"Lab 13 · Lantern Rotation",href:"lab13.html",
+     scen:"Over six months on one access, the operator's active hours jump timezones mid-campaign and OPSEC discipline resets from sloppy back to careful.",
+     opts:["One operator who changed habits","Likely an operator rotation — two hands on one access; don't merge them into a single persona","A clock-sync glitch"],correct:1,
+     why:"A step discontinuity across hours + OPSEC + tooling is a handoff. Benign drift is gradual; a rotation is a step."},
+    {lab:"Lab 14 · threat-intel pivots",href:"lab14.html",
+     scen:"Pivoting the C2 IP, a shared-TLS-cert pivot yields two sibling domains; a pivot onto a Cloudflare IP surfaces my-recipes-blog.com.",
+     opts:["Cluster all three — they're all connected","Keep the cert siblings, prune the Cloudflare result as a shared-infrastructure bystander","The recipe blog is the real C2"],correct:1,
+     why:"Strong edge (bespoke cert) clusters; weak edge (shared CDN IP) is a bystander factory — prune it, don't accuse it."},
+    {lab:"Lab 7 · evidence timeline",href:"lab7.html",
+     scen:"You've correlated persistence + injection + hook + beacon + lateral on one proc_key across five independent sensors, in a hash-chained .vbook.",
+     opts:["CONFIRMED — trigger automatic containment","DRAFT, high-confidence — pending human confirmation; the SIEM evidences, the endpoint contains","Inconclusive — single sensor"],correct:1,
+     why:"Automated correlation reaches high-confidence DRAFT, never auto-CONFIRMED. A human adjudicates; containment is an endpoint decision."}
+  ];
+  var answers=new Array(Q.length).fill(-1), graded=false;
+
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function render(){
+    document.getElementById("quiz").innerHTML=Q.map(function(q,qi){
+      var opts=q.opts.map(function(o,oi){
+        var cls="opt"+(answers[qi]===oi?" sel":"");
+        if(graded){ if(oi===q.correct) cls="opt correct"; else if(answers[qi]===oi) cls="opt wrong"; }
+        return '<label class="'+cls+'"><input type="radio" name="q'+qi+'" '+(answers[qi]===oi?"checked":"")+' '+(graded?"disabled":"")+' onchange="pick('+qi+','+oi+')"><span>'+esc(o)+'</span></label>';
+      }).join("");
+      var fb="";
+      if(graded){ var ok=answers[qi]===q.correct;
+        fb='<div class="fb show '+(ok?"ok":"no")+'">'+(ok?"✓ correct. ":"✗ ")+esc(q.why)+' &nbsp;<a href="'+q.href+'">review '+q.lab.split(' · ')[0]+' →</a></div>'; }
+      return '<div class="q" id="q'+qi+'"><div class="qh"><span class="qn">'+(qi+1)+'</span><span class="ql">'+q.lab+'</span></div>'+
+        '<div class="scen">'+esc(q.scen)+(q.ev?'<span class="ev">'+esc(q.ev)+'</span>':'')+'</div>'+
+        '<div class="opts">'+opts+'</div>'+fb+'</div>';
+    }).join("");
+    updateProg();
+  }
+  function updateProg(){
+    var n=answers.filter(function(a){return a>=0;}).length;
+    document.getElementById("pc").textContent=n+" / "+Q.length+" answered";
+    document.getElementById("barfill").style.width=(n/Q.length*100)+"%";
+    document.getElementById("gradeBtn").disabled = graded || n<Q.length;
+  }
+  window.pick=function(qi,oi){ if(graded)return; answers[qi]=oi; render(); };
+  window.resetQuiz=function(){ answers=new Array(Q.length).fill(-1); graded=false;
+    document.getElementById("result").className="result"; document.getElementById("result").innerHTML=""; render();
+    window.scrollTo({top:0,behavior:"smooth"}); };
+  window.grade=function(){
+    if(answers.some(function(a){return a<0;})) return;
+    graded=true;
+    var score=0,missed=[];
+    Q.forEach(function(q,qi){ if(answers[qi]===q.correct) score++; else missed.push(q); });
+    render();
+    document.getElementById("sc").textContent=score+" / "+Q.length;
+    var pct=Math.round(score/Q.length*100), pass=score>=12;
+    var r=document.getElementById("result");
+    r.className="result show "+(pass?"pass":"fail");
+    var rev = missed.length ? ('<div class="review"><b>Review:</b> '+missed.map(function(m){return '<a href="'+m.href+'">'+m.lab.split(' · ')[0]+'</a>';}).join(" · ")+'</div>') :
+      '<div class="review" style="color:var(--good)">Clean sweep — every technique, correct.</div>';
+    r.innerHTML='<div class="grade">'+pct+'%</div>'+
+      '<div class="verdict">'+(pass?'PASS &mdash; you worked the whole chain ('+score+'/'+Q.length+')':'NOT YET &mdash; '+score+'/'+Q.length+', need 12/15')+'</div>'+
+      rev+
+      '<div class="cert">'+(pass
+        ? 'Capstone cleared. CASE DAYBREAK-07 correlated across '+Q.length+' techniques into one disciplined, human-pending verdict — measured, never weaponized. — BlueKit BlueChain Lab'
+        : 'Close the gaps in the linked labs and run it again. The exam is open-lab by design — the goal is the judgment, not the memory.')+'</div>';
+    r.scrollIntoView({behavior:"smooth",block:"center"});
+  };
+  render();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

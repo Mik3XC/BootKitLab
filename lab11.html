@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 11 — macOS Persistence</title>
+<meta name="description" content="Where persistence hides on macOS — LaunchAgents and Daemons, the BTM login-items database, login hooks, config profiles — and how to sweep for it with signing, path and baseline.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.72rem;min-width:188px;color:var(--amber);word-break:break-word}
+  .tbl .r .d{font-size:.86rem;color:var(--muted)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  /* sweep rows */
+  .items{display:grid;gap:9px}
+  .it{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:11px 13px;min-width:0}
+  .it .ih{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .it .lb{font-family:var(--mono);font-size:.8rem;color:var(--fg);font-weight:600;word-break:break-all}
+  .it .loc{font-family:var(--mono);font-size:.7rem;color:var(--faint)}
+  .it .verdict{font-family:var(--mono);font-size:.7rem;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--faint);white-space:nowrap}
+  .it .meta{font-family:var(--mono);font-size:.73rem;color:var(--muted);margin-top:6px;line-height:1.6;word-break:break-all}
+  .it .meta .sg{color:var(--good)} .it .meta .no{color:var(--crit)} .it .meta .q{color:var(--amber)}
+  .it.flag{border-color:var(--crit)} .it.flag .verdict{color:var(--crit);border-color:var(--crit);background:#2a1414}
+  .it.known{border-color:var(--cyan-dim)} .it.known .verdict{color:var(--info);border-color:var(--cyan-dim)}
+  .it.clean .verdict{color:var(--good);border-color:var(--cyan-dim)}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .r{color:var(--crit)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html" class="cur">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 11 · detection engineering · home turf</div>
+    <h1>Persistence, on your own <span class="cy">Mac</span>.</h1>
+    <p class="sub">Lab 1 was persistence in the boot chain. This is the version that actually runs on the machine in front of you. An implant that survives a reboot has to register <em>somewhere</em> the OS will read on the way up or on login — and macOS has a fixed, well-known set of those places. That's the defender's advantage: the hiding spots are enumerable. You list them, check each item's signature and path against what belongs, and diff against a baseline. New, unsigned, and in the wrong place is the whole game.</p>
+    <div class="banner"><b>Analysis only.</b> This reads the persistence locations and classifies what's there. It installs nothing, loads no agent, and changes no plist — it's the sweep, not the implant.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the hiding spots</div>
+  <h2>Where it has to live</h2>
+  <p class="lede">To survive, persistence registers with one of a handful of OS mechanisms. Each is a place you can enumerate:</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">LaunchAgents / LaunchDaemons</span><span class="d">The big one. plists in <code>~/Library/LaunchAgents</code> (per-user), <code>/Library/LaunchAgents</code> + <code>/Library/LaunchDaemons</code> (system), run by <code>launchd</code> with <code>RunAtLoad</code> / <code>KeepAlive</code>. Most macOS malware lands here.</span></div>
+    <div class="r"><span class="lab">Login items / BTM</span><span class="d">Modern background items register via <code>SMAppService</code> and are tracked in the <b>Background Task Management</b> database (macOS 13+). <code>sfltool dumpbtm</code> lists them; a new ad-hoc-signed helper here is a classic dropper tail.</span></div>
+    <div class="r"><span class="lab">login / logout hooks</span><span class="d">Legacy <code>com.apple.loginwindow</code> <code>LoginHook</code> running a shell script. Deprecated, still works, and rarely legitimate today — a strong signal when present.</span></div>
+    <div class="r"><span class="lab">cron / periodic / at</span><span class="d">Classic Unix scheduling still runs. A <code>crontab</code> entry or a script dropped into <code>/etc/periodic</code> is low-tech persistence that EDR sometimes overlooks.</span></div>
+    <div class="r"><span class="lab">config profiles / MDM</span><span class="d">A <code>.mobileconfig</code> can install payloads and settings with authority. An unexpected profile (<code>profiles list</code>) is persistence <em>and</em> policy control at once.</span></div>
+    <div class="r"><span class="lab">dylib insertion</span><span class="d"><code>DYLD_INSERT_LIBRARIES</code> in a plist's environment, or a hijackable @rpath, loads attacker code into a legit process on launch — ties straight to Lab 6 &amp; 9.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — run the sweep</div>
+  <h2>List, then judge</h2>
+  <p class="lede">A snapshot of the persistence locations on a sample Mac. Run the sweep — each item is judged by <b>who signed it</b> (Apple / valid Developer&nbsp;ID / unsigned-or-ad-hoc), <b>where its program lives</b> (a system path vs. <code>/tmp</code> or a hidden dir), and whether it <b>masquerades</b> as something Apple. Apple system agents and known vendors pass; the odd ones out light up.</p>
+  <div class="controls">
+    <button class="btn" id="sweepBtn" onclick="runSweep()">▶ run persistence sweep</button>
+    <button class="btn ghost" onclick="resetSweep()">reset</button>
+  </div>
+  <div class="items" id="items"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — how you'd really watch it</div>
+  <h2>Enumerate, baseline, diff</h2>
+  <p class="lede">The sweep above is a point-in-time list. The real detection is continuous: enumerate the locations, establish a baseline of what's normal for this host, and alert on anything that <em>appears</em> — the same baseline-then-diff from Labs 1 and 3, pointed at launchd.</p>
+  <pre><span class="c"># osquery — the persistence locations as tables, queryable and diffable</span>
+SELECT name,path,program,run_at_load FROM <span class="k">launchd</span>
+  WHERE run_at_load=1;                      <span class="c"># agents/daemons</span>
+SELECT * FROM <span class="k">startup_items</span>;   SELECT * FROM <span class="k">crontab</span>;
+SELECT * FROM <span class="k">launchd_overrides</span>;  <span class="c"># disabled→enabled flips</span>
+
+<span class="c"># eslogger — watch the locations change in real time (Endpoint Security)</span>
+eslogger <span class="k">btm_launch_item_add</span> create       <span class="c"># new login item / plist write</span>
+
+<span class="c"># signing &amp; profiles</span>
+codesign -dv --verbose=4 &lt;program&gt;   ·   spctl --assess   ·   profiles list
+
+<span class="c"># reference tools (Objective-See)</span>
+KnockKnock  <span class="c"># enumerate every persistence point, check signatures</span>
+BlockBlock  <span class="c"># alert the moment something persists</span></pre>
+  <p class="lede">A new item becomes a <b>Vertical</b> case (Lab 7): the plist, its signature verdict, the writing process and its lineage, captured as evidence.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>Legit Macs are noisy</h2>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">There are a lot of real agents.</b> A working Mac has dozens of legitimate LaunchAgents — updaters (Google, Microsoft, Adobe), sync clients, drivers. The flag is never &ldquo;has a LaunchAgent,&rdquo; it's new + unsigned + wrong-path + unexpected, together.</li>
+    <li><b style="color:var(--fg)">Signed and notarized isn't innocent.</b> Developer ID gets stolen and abused, and legitimately-signed installers drop helpers. Signature tells you <em>who</em> and <em>whether revoked</em> — a necessary check, not a verdict (same lesson as Lab 9).</li>
+    <li><b style="color:var(--fg)">SIP hides the system from you — and that's good.</b> System-protected locations can't be tampered with <em>or</em> freely read; you lean on the Endpoint Security framework and signed system snapshots rather than scraping protected paths. Detection works <em>with</em> the platform's integrity, not around it.</li>
+    <li><b style="color:var(--fg)">Permissions ≠ persistence, but they travel together.</b> TCC (privacy permissions) and persistence are different things, yet an implant usually wants both — so an unexpected new agent that has also been granted Full Disk Access or Accessibility is a louder, corroborated signal than either alone.</li>
+  </ul>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">tools &amp; platform</span>
+        <b>Apple</b> — <code>launchd</code>, Service Management (<code>SMAppService</code> / BTM), Endpoint Security framework.<br>
+        <b>osquery</b> — <code>launchd</code>, <code>startup_items</code>, <code>crontab</code>, <code>launchd_overrides</code> tables.<br>
+        <b>Objective-See</b> (P. Wardle) — KnockKnock, BlockBlock, <em>The Art of Mac Malware</em>.<br>
+        this lab: <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">mapping</span>
+        <b>MITRE ATT&amp;CK</b> — Create or Modify System Process: Launch Agent <code>T1543.001</code> / Launch Daemon <code>T1543.004</code>; Boot/Logon Autostart: plist mod <code>T1547.011</code>; Boot/Logon Init Scripts <code>T1037</code>; Event-Triggered Execution <code>T1546</code>.<br>
+        <span class="grp">the thread</span>
+        Lab 1's persistence, now on the host you're reading this on — and the agent that drops the dylib (Lab 6/9), beacons (Lab 4), becomes the case (Lab 7).
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 12 — DNS / DGA: expanding Lab 4's tunnel detector into domain-generation-algorithm scoring and fast-flux.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 11 · macOS persistence · the hiding spots are enumerable — list them, check signing and path, diff the baseline · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  // snapshot of persistence locations on a sample Mac
+  var ITEMS=[
+    {lb:"com.apple.safaridavclient",loc:"/System/Library/LaunchDaemons",prog:"/usr/libexec/...",sign:"apple",path:"system",masq:false,note:"Apple system daemon, SIP-protected."},
+    {lb:"com.google.keystone.agent",loc:"~/Library/LaunchAgents",prog:"…/GoogleSoftwareUpdate.bundle",sign:"devid:Google",path:"vendor",masq:false,note:"Google updater — valid Developer ID."},
+    {lb:"com.adobe.ARMDCHelper",loc:"/Library/LaunchDaemons",prog:"/Library/Application Support/Adobe/…",sign:"devid:Adobe",path:"vendor",masq:false,note:"Adobe updater — valid Developer ID."},
+    {lb:"com.apple.softwareupdate",loc:"~/Library/LaunchAgents",prog:"/Users/Shared/.sysupd/update",sign:"unsigned",path:"hidden",masq:true,note:"label impersonates Apple; program in a hidden Shared dir; unsigned; RunAtLoad."},
+    {lb:"LoginHook",loc:"com.apple.loginwindow",prog:"/tmp/.x/run.sh",sign:"script",path:"tmp",masq:false,note:"legacy login hook running a shell script from /tmp."},
+    {lb:"HelperUpdater",loc:"BTM login item (added today)",prog:"~/Downloads/Installer.app/…/Helper",sign:"adhoc",path:"downloads",masq:false,note:"background item registered today, ad-hoc signed, program still in Downloads."},
+    {lb:"com.microsoft.autoupdate.helper",loc:"/Library/LaunchDaemons",prog:"/Library/Application Support/Microsoft/…",sign:"devid:Microsoft",path:"vendor",masq:false,note:"MS AutoUpdate — valid Developer ID."}
+  ];
+  function classify(x){
+    if(x.masq || x.sign==="unsigned" || x.sign==="adhoc" || x.path==="tmp" || x.path==="hidden" ||
+       (x.loc==="com.apple.loginwindow")) return "flag";
+    if(x.sign==="apple") return "clean";
+    if(x.sign.indexOf("devid:")===0) return "known";
+    return "flag";
+  }
+  function signLabel(s){
+    if(s==="apple") return '<span class="sg">Apple-signed (system)</span>';
+    if(s.indexOf("devid:")===0) return '<span class="sg">Developer ID: '+s.slice(6)+'</span>';
+    if(s==="unsigned") return '<span class="no">unsigned</span>';
+    if(s==="adhoc") return '<span class="no">ad-hoc signed</span>';
+    if(s==="script") return '<span class="q">script (no signature)</span>';
+    return s;
+  }
+  function verdictLabel(c){ return c==="clean"?"Apple system":(c==="known"?"known vendor":"investigate"); }
+  function render(scan){
+    document.getElementById("items").innerHTML=ITEMS.map(function(x){
+      var c=scan?classify(x):null, cls="it"+(scan?(" "+c):"");
+      var v=scan?('<span class="verdict">'+verdictLabel(c)+'</span>'):'<span class="verdict">not scored</span>';
+      var meta=scan?('<div class="meta">'+signLabel(x.sign)+' · <code>'+x.prog+'</code><br>'+
+        (c==="flag"?'<span class="no">⚑ '+x.note+'</span>':x.note)+'</div>'):'';
+      return '<div class="'+cls+'"><div class="ih"><span class="lb">'+x.lb+'</span><span class="loc">'+x.loc+'</span>'+v+'</div>'+meta+'</div>';
+    }).join("");
+  }
+  window.resetSweep=function(){ render(false); };
+  window.runSweep=function(){ render(true); };
+  render(false);
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

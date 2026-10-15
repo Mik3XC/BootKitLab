@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 14 — Threat-Intel Pivots</title>
+<meta name="description" content="Turn one confirmed indicator into the adversary's wider infrastructure — pivoting on TLS certs, passive DNS, registrant and favicon hashes, while pruning the shared-infrastructure traps.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow:auto}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.72rem;min-width:124px;color:var(--amber)}
+  .tbl .r .d{font-size:.86rem;color:var(--muted)}
+  /* pivot board */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .4rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .pivbtns{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+  .pb{font-family:var(--mono);font-size:.74rem;cursor:pointer;border-radius:8px;padding:7px 11px;background:transparent;color:var(--fg);border:1px solid var(--line)}
+  .pb:hover{border-color:var(--cyan-dim);background:#0c1a1a}
+  .pb[data-done=true]{opacity:.5;cursor:default}
+  .pb .cf{font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;margin-left:5px}
+  .pb .cf.s{color:var(--good)} .pb .cf.w{color:var(--amber)} .pb .cf.f{color:var(--crit)}
+  .board{border:1px solid var(--line);border-radius:12px;background:var(--panel-2);padding:14px;margin-top:6px;min-height:120px}
+  .seed{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:.82rem;color:#160709;background:var(--amber);border-radius:8px;padding:7px 12px;font-weight:700}
+  .cluster{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .node{font-family:var(--mono);font-size:.74rem;border-radius:8px;padding:7px 11px;border:1px solid var(--line);background:#0c1620;color:var(--fg);min-width:0}
+  .node .via{display:block;font-size:.64rem;color:var(--faint);margin-top:2px}
+  .node.s{border-color:var(--cyan-dim)} .node.s .via{color:var(--cyan)}
+  .node.w{border-color:var(--amber-dim)} .node.w .via{color:var(--amber)}
+  .node.f{border-color:var(--crit);background:#180f10} .node.f .via{color:var(--crit)}
+  .tally{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px 14px;margin-top:12px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7}
+  .tally b{color:var(--fg)} .tally .s{color:var(--good)} .tally .f{color:var(--crit)} .tally .w{color:var(--amber)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  .fin{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:12px;padding:16px;margin-top:16px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7}
+  .fin b{color:var(--cyan)}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html" class="cur">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 14 · threat intelligence · the finale</div>
+    <h1>One indicator, the <span class="cy">whole house</span>.</h1>
+    <p class="sub">A single confirmed bad indicator is a loose thread. Pull it through the things the adversary <em>reused</em> — a TLS certificate, a registration pattern, a favicon, a passive-DNS history — and the rest of their infrastructure comes with it. This is the analyst's multiplier: one domain becomes a map. The craft is knowing which threads are the adversary's own and which are shared by half the internet, because the fastest way to burn a day is to pivot onto a CDN and &ldquo;discover&rdquo; Cloudflare.</p>
+    <div class="banner"><b>Passive &amp; analysis only.</b> Every pivot here is open-source enrichment of an indicator you already have — passive DNS, certificate transparency, WHOIS, public scan data. Nothing scans, probes, or touches the adversary's live infrastructure.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — why it works</div>
+  <h2>Attackers reuse, and reuse leaves links</h2>
+  <p class="lede">Infrastructure costs effort, so operators recycle it: the same self-signed cert across panels, the same registrant identity, the same host, the same hand-built C2 landing page (and thus the same favicon). Each reused attribute is an <em>edge</em> you can traverse from a known-bad node to its unknown siblings. The whole game is <b>edge quality</b>: pivot on something specific to this adversary, not something they happen to share with everyone.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">strong edges</span><span class="d">Attributes rare enough to be near-unique: a specific self-signed <b>TLS cert</b> (SHA-1/SHA-256), a reused <b>registrant email</b>, a hand-rolled panel's <b>favicon hash</b> (mmh3), a distinctive <b>JARM/JA3S</b> TLS fingerprint. A match here is a real link.</span></div>
+    <div class="r"><span class="lab">weak edges</span><span class="d">Attributes shared by millions: a cloud <b>ASN</b>, a <b>CDN IP</b>, a privacy-proxy WHOIS, a Let's&nbsp;Encrypt issuer. A match here means almost nothing on its own — it's a hint, not a link.</span></div>
+    <div class="r"><span class="lab">the method</span><span class="d">Expand on strong edges, corroborate across two+ independent edges before you claim a node, and <b>prune</b> anything that only connects through a weak edge. Confidence is per-edge, and the cluster is only as good as its weakest included link.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — build the cluster</div>
+  <h2>Pivot from one seed</h2>
+  <p class="lede">Seed: the C2 IP confirmed back in Labs 4 &amp; 7. Run each pivot and watch the infrastructure assemble — strong edges add confirmed siblings, the ASN pivot is withheld as too broad, and the CDN pivot drags in an innocent bystander you'll have to prune. Build the house, then check your work.</p>
+  <div class="board">
+    <span class="seed" id="seed">● 185.220.101.47 · confirmed C2 (Lab 4/7)</span>
+    <div class="pivbtns" id="pivbtns"></div>
+    <div class="cluster" id="cluster"></div>
+  </div>
+  <div class="controls"><button class="btn ghost" onclick="resetPivot()">reset</button></div>
+  <div class="tally" id="tally">Run pivots to assemble the cluster.</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the pivot set</div>
+  <h2>What each thread reveals — and its trap</h2>
+  <div class="tbl">
+    <div class="r"><span class="lab">passive DNS</span><span class="d">Historical domain↔IP resolutions from recursive-resolver telemetry (Farsight/DNSDB-style). Reveals every domain that ever pointed here. <em>Trap:</em> shared/parked hosting means co-residents who aren't related.</span></div>
+    <div class="r"><span class="lab">TLS certificate</span><span class="d">Certificate Transparency + scan data: same cert hash, SANs, or self-signed subject across hosts. Strong when the cert is bespoke. <em>Trap:</em> wildcard/shared-panel certs and Let's Encrypt reuse.</span></div>
+    <div class="r"><span class="lab">WHOIS / registrant</span><span class="d">Registrant email, org, nameservers, registration timing. Reused identity or same-day bulk registration is a strong cluster. <em>Trap:</em> privacy proxies redact nearly everything now.</span></div>
+    <div class="r"><span class="lab">favicon hash</span><span class="d">mmh3 hash of the site's favicon (Shodan/Censys indexable). A hand-built C2 panel reused across hosts shares an exact favicon. <em>Trap:</em> default framework favicons are everywhere.</span></div>
+    <div class="r"><span class="lab">JARM / JA3S</span><span class="d">Active/observed TLS-stack fingerprints. Clusters hosts running the same C2 server software. <em>Trap:</em> popular stacks (nginx, Cobalt-Strike-lookalikes) collide with legit servers.</span></div>
+    <div class="r"><span class="lab">ASN / netblock</span><span class="d">The hosting network. Useful as <em>context</em> (bulletproof hosters recur). <em>Trap:</em> never a link by itself — an ASN holds millions of unrelated hosts.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>The fastest way to be wrong</h2>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Shared infrastructure is a bystander factory.</b> Pivot onto a Cloudflare IP or a shared host and you'll &ldquo;find&rdquo; thousands of unrelated sites. Every one you include is a false accusation. Weak edges get pruned, not clustered.</li>
+    <li><b style="color:var(--fg)">WHOIS is mostly dark now.</b> Post-GDPR redaction and privacy proxies mean registrant pivots often dead-end. Absence of a link isn't absence of a relationship.</li>
+    <li><b style="color:var(--fg)">Passive beats active — and it's the legal line.</b> Enriching an indicator from OSINT and passive telemetry is analysis. Actively scanning or connecting to the adversary's infrastructure is a different activity with different rules; this lab stays on the passive side of that line, and so should you.</li>
+    <li><b style="color:var(--fg)">A cluster is a hypothesis.</b> Two independent strong edges make a confident link; one makes a lead. Everything you assemble feeds back into the timeline (Lab 7) and the actor model (Lab 13) as <em>evidence</em>, not verdict.</li>
+  </ul>
+  <div class="fin"><b>The series, closed.</b> Fourteen labs, first instruction to full campaign: the boot sector (<a href="lab1.html">1</a>), the kernel's call tables and views (<a href="lab2.html">2</a>&ndash;<a href="lab3.html">3</a>), the network &mdash; C2, streams, signatures, DNS (<a href="lab4.html">4</a>, <a href="lab4b.html">4B</a>, <a href="lab5.html">5</a>, <a href="lab12.html">12</a>), the host &mdash; memory, sleds, files, exploitation, persistence (<a href="lab6.html">6</a>, <a href="lab8.html">8</a>, <a href="lab9.html">9</a>, <a href="lab10.html">10</a>, <a href="lab11.html">11</a>), and the humans &mdash; the case, the operator, the infrastructure (<a href="lab7.html">7</a>, <a href="lab13.html">13</a>, 14). Measure the ground; never become it.</div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">sources &amp; tooling</span>
+        <b>Caltagirone, Pendergast &amp; Betz</b> (2013). The Diamond Model &mdash; the analytic <em>pivot</em> is the model's core operation.<br>
+        <b>Farsight / DNSDB</b> passive DNS · <b>Certificate Transparency</b> logs · <b>Shodan</b> / <b>Censys</b> (favicon &amp; JARM) · <b>MISP</b> (indicator sharing).<br>
+        <b>Althouse</b> et al. &mdash; JARM / JA3S TLS fingerprinting (Salesforce).
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">this lab</span>
+        <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a><br>
+        <b>MITRE ATT&amp;CK</b> &mdash; Reconnaissance / Resource Development (adversary infrastructure).<br>
+        Consumes the seeds from <a href="lab4.html">Lab 4</a> &amp; <a href="lab12.html">Lab 12</a>; feeds <a href="lab7.html">Lab 7</a> &amp; <a href="lab13.html">Lab 13</a>.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 15 — a graded capstone exercise: a full intrusion to work end-to-end across every lab.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 14 · threat-intel pivots · expand on strong edges, prune the shared ones, corroborate before you accuse · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var PIVOTS=[
+    {id:"cert",lab:"TLS cert",cf:"s",nodes:[
+      {n:"webredirect.xyz",via:"same self-signed cert SHA-256 f3a9…"},
+      {n:"n7k2fzqx.webredirect.xyz",via:"same cert · the flux domain (Lab 12)"}]},
+    {id:"pdns",lab:"passive DNS",cf:"s",nodes:[
+      {n:"update-svc.duckdns.org",via:"resolved to 185.220.101.47 (Mar–Jun)"},
+      {n:"45.133.1.9",via:"sibling IP in same pDNS window"}]},
+    {id:"whois",lab:"registrant",cf:"s",nodes:[
+      {n:"paymentsecure-portal.top",via:"same registrant proton addr + same-day bulk reg"}]},
+    {id:"favicon",lab:"favicon hash",cf:"s",nodes:[
+      {n:"4 panels (Censys)",via:"identical mmh3 favicon -1265340710 — hand-built C2 panel"}]},
+    {id:"asn",lab:"ASN",cf:"w",nodes:[]},
+    {id:"cdn",lab:"shared CDN IP",cf:"f",nodes:[
+      {n:"my-recipes-blog.com",via:"shares 104.18.2.10 (Cloudflare) — innocent co-tenant"}]}
+  ];
+  var added={}; // id -> true
+  function renderBtns(){
+    document.getElementById("pivbtns").innerHTML=PIVOTS.map(function(p){
+      var cfl=p.cf==="s"?"strong":(p.cf==="w"?"weak":"trap");
+      return '<button class="pb" data-id="'+p.id+'" data-done="'+(!!added[p.id])+'" onclick="pivot(\''+p.id+'\')">pivot · '+p.lab+'<span class="cf '+p.cf+'">'+cfl+'</span></button>';
+    }).join("");
+  }
+  function renderCluster(){
+    var html="";
+    PIVOTS.forEach(function(p){ if(!added[p.id]) return;
+      p.nodes.forEach(function(nd){ html+='<div class="node '+p.cf+'">'+nd.n+'<span class="via">via '+p.lab+' · '+nd.via+'</span></div>'; });
+    });
+    document.getElementById("cluster").innerHTML=html;
+  }
+  function tally(){
+    var conf=0,pruned=0,withheld=0,notes=[];
+    PIVOTS.forEach(function(p){ if(!added[p.id]) return;
+      if(p.cf==="s") conf+=p.nodes.length;
+      else if(p.cf==="f"){ pruned+=p.nodes.length; notes.push('<span class="f">pruned</span> '+p.nodes.length+' bystander via '+p.lab+' (shared infra — not a link)'); }
+      else if(p.cf==="w"){ withheld++; notes.push('<span class="w">withheld</span> '+p.lab+' pivot — an ASN holds millions of hosts, too broad to cluster on'); }
+    });
+    var t='<div><b>confirmed cluster:</b> <span class="s">'+conf+' nodes</span> on strong edges';
+    if(pruned) t+=' · <span class="f">'+pruned+' pruned</span>';
+    if(withheld) t+=' · <span class="w">'+withheld+' withheld</span>';
+    t+='</div>';
+    notes.forEach(function(n){ t+='<div style="font-size:.76rem">'+n+'</div>'; });
+    if(conf>=4) t+='<div style="margin-top:6px;color:var(--fg)">Two+ independent strong edges corroborate the core (<code>webredirect.xyz</code> seen via cert <em>and</em> pDNS). Hand the cluster to Lab 7 as evidence — a hypothesis, not a verdict.</div>';
+    document.getElementById("tally").innerHTML=t;
+  }
+  window.pivot=function(id){ if(added[id])return; added[id]=true; renderBtns(); renderCluster(); tally(); };
+  window.resetPivot=function(){ added={}; renderBtns(); document.getElementById("cluster").innerHTML=""; document.getElementById("tally").textContent="Run pivots to assemble the cluster."; };
+  renderBtns();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 8 — NOP Sled</title>
+<meta name="description" content="Detect a NOP sled by its shape — a long run of executable-but-inert bytes — including the register-noise variants built to slip past a literal 0x90 scan.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.6rem,6vw,2.6rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:140px;color:var(--amber)}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:.2rem 0 1rem}
+  .seg button{font-family:var(--mono);font-size:.8rem;background:transparent;color:var(--muted);border:0;padding:8px 15px;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--cyan);color:#04100f;font-weight:600}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .6rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .pktwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:#05090c;padding:12px;margin-top:4px}
+  .hex{font-family:var(--mono);font-size:.74rem;line-height:1.9;white-space:pre}
+  .hex .off{color:var(--faint)}
+  .hex b{font-weight:400;color:var(--faint);padding:1px 2px;border-radius:3px}
+  .hex b.head{color:var(--muted)}
+  .hex b.pay{color:var(--viol)}
+  .hex b.sled{color:#ffb3b3;background:#2a1414}
+  .hex b.nop0{color:#ffd27a;background:#2a2008}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:.72rem;color:var(--muted);margin:10px 0 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .dets{display:grid;gap:10px;margin-top:12px}
+  @media(min-width:560px){.dets{grid-template-columns:1fr 1fr}}
+  .det{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:12px;font-family:var(--mono);font-size:.8rem;color:var(--muted)}
+  .det h4{margin:0 0 6px;font-size:.76rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .det.flag{border-color:var(--crit)} .det.flag .v{color:var(--crit)}
+  .det.miss{border-color:var(--amber-dim)} .det.miss .v{color:var(--amber)}
+  .det .v{font-weight:600;font-size:.86rem}
+  .det .x{color:var(--faint);font-size:.74rem;margin-top:4px}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html" class="cur">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 8 · detection engineering</div>
+    <h1>The <span class="cy">landing zone</span>.</h1>
+    <p class="sub">An exploit that hijacks execution rarely knows the exact address its payload will land at — stacks shift, heaps move. So it builds a runway: a long stretch of do-nothing instructions, the <b>NOP sled</b>, so an imprecise jump lands <em>somewhere</em> on it and slides down into the real code. You've seen it twice — keyed on in Lab 5's wire signature, found in Lab 6's RAM scan. Here it gets its own lab, because the sled is a gift: a long run of executable-but-inert bytes has no honest reason to exist in a buffer, and that shape is detectable even when the attacker files off the obvious <code>0x90</code>.</p>
+    <div class="banner"><b>Detection only.</b> Nothing here builds or fires a sled. The samples are byte buffers; the work is recognizing the runway by its length and its inertness — never constructing one.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — why a runway exists</div>
+  <h2>The tell is the inertness</h2>
+  <p class="lede">A sled trades precision for margin. The bigger the run of harmless instructions, the sloppier the jump can be and still work. That trade is exactly what gives it away: the defender doesn't need to decode the exploit, only to notice a long span of bytes that are <em>valid, executable, and do nothing</em> — sitting in a place (a path field, a network buffer, a data region) where executable filler makes no sense.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">run length</span><span class="d">The primary signal. A handful of <code>0x90</code> is noise; dozens in a row forming a contiguous inert span is a runway. You measure the length of the longest do-nothing run.</span></div>
+    <div class="r"><span class="lab">inertness, not 0x90</span><span class="d">The run doesn't have to be <code>0x90</code>. Any one-byte instruction with no net effect works — and attackers use that to dodge a naive scanner. You test against the <em>class</em>, not the one byte.</span></div>
+    <div class="r"><span class="lab">entropy valley</span><span class="d">Shellcode around it is high-entropy; the sled is a low-entropy executable stretch. A sudden entropy dip inside executable bytes is a corroborating flag.</span></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — scan a buffer</div>
+  <h2>Naive vs. shape-aware</h2>
+  <p class="lede">Two sample buffers. The <b>classic</b> one is a wall of <code>0x90</code>. The <b>evasive</b> one is a register-noise sled — a mix of single-byte instructions (<code>inc</code>/<code>dec</code> reg, <code>xchg eax,reg</code>, flag ops) that each do nothing useful but aren't <code>0x90</code>. Run both detectors and watch the naive one get fooled:</p>
+  <div class="seg" role="group" aria-label="sample buffer">
+    <button id="bC" aria-pressed="true" onclick="setBuf('classic')">classic 0x90 sled</button>
+    <button id="bE" aria-pressed="false" onclick="setBuf('evasive')">register-noise sled</button>
+  </div>
+  <div class="controls">
+    <button class="btn" id="runBtn" onclick="runScan()">▶ run detectors</button>
+    <button class="btn ghost" onclick="resetScan()">reset</button>
+  </div>
+  <div class="pktwrap"><div class="hex" id="hex"></div></div>
+  <div class="legend" aria-hidden="true">
+    <span><i style="background:#2a2008;border:1px solid var(--amber)"></i>0x90 NOP</span>
+    <span><i style="background:#2a1414;border:1px solid var(--crit)"></i>NOP-equivalent run</span>
+    <span><i style="background:transparent;border:1px solid var(--viol)"></i>payload</span>
+  </div>
+  <div class="dets" id="dets"></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the NOP-equivalent class</div>
+  <h2>It was never just 0x90</h2>
+  <p class="lede">A shape-aware scanner keys on run length over a <em>class</em> of one-byte instructions that leave the payload untouched — so a sled built from register noise still lights up. The lab's set:</p>
+  <pre><span class="c"># single-byte, no net effect on the payload path</span>
+0x90                      <span class="c">NOP</span>
+0x40-0x47                 <span class="c">INC eAX..eDI</span>
+0x48-0x4F                 <span class="c">DEC eAX..eDI</span>
+0x91-0x97                 <span class="c">XCHG eAX, reg</span>
+0x27 0x2F 0x37 0x3F       <span class="c">DAA DAS AAA AAS</span>
+0xF5 0xF8 0xF9 0xFC 0xFD  <span class="c">CMC CLC STC CLD STD</span>
+
+<span class="k">detect</span>: longest contiguous run over this class ≥ threshold (e.g. 16)
+         → candidate sled; corroborate with the entropy valley</pre>
+  <p class="lede">This is the same move as every lab before it: a literal <code>content</code> match is brittle (Lab 5), so you detect the <em>property</em> — here, &ldquo;a long inert executable run&rdquo; — instead of one magic byte. Polymorphic engines can push further (trampoline sleds that jump forward, four-byte-aligned sleds), and the arms race continues; run-length over the equivalence class plus entropy is the durable, cheap first pass.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">04 — the hard part</div>
+  <h2>The sled is going extinct</h2>
+  <p class="lede">The honest context: the classic sled is a technique in decline, and a detector tuned only for it ages badly.</p>
+  <ul class="tight">
+    <li><b style="color:var(--fg)">Modern exploits often need none.</b> Precise info-leaks defeat ASLR and let an exploit jump to an exact address — no margin, no runway, nothing for this scanner to catch.</li>
+    <li><b style="color:var(--fg)">ROP / JOP have no sled at all.</b> Return- and jump-oriented programming chain existing code gadgets; there's no injected inert run to find. Their tell is a pivoted stack and misaligned returns — a different detector entirely (a candidate for a later lab).</li>
+    <li><b style="color:var(--fg)">Benign long runs exist.</b> Padding, zero-fill, and some encodings produce long uniform spans. The scanner must require the run be <em>executable-class inert</em> and sit where code has no business — and even then it corroborates, never convicts alone.</li>
+    <li><b style="color:var(--fg)">So it's one signal.</b> A sled finding is strongest joined to the others: the wire match (Lab 5), the injected RWX page it pads (Lab 6), the case it belongs to (Lab 7). Alone it's a lead; in the timeline it's evidence.</li>
+  </ul>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">this lab</span>
+        <b>BlueTeamLab</b> — the detection lab this series documents.<br>
+        <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a><br>
+        Closes the sled thread: keyed on in <a href="lab5.html">Lab 5</a>, found in <a href="lab6.html">Lab 6</a>, cased in <a href="lab7.html">Lab 7</a>.
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">references</span>
+        <b>Toth &amp; Kruegel</b> (2002), &ldquo;Accurate Buffer Overflow Detection via Abstract Payload Execution,&rdquo; <em>RAID</em> — sled detection by executable-run length.<br>
+        <b>Akritidis et al.</b> (2005), STRIDE — sled / shellcode detection.<br>
+        <b>Fogla &amp; Lee</b> (2006), &ldquo;Polymorphic Blending Attacks,&rdquo; <em>USENIX Security</em> — why byte-literal signatures erode.<br>
+        <b>NOP-equivalent instruction class</b> — the basis of register-noise sleds.
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 9 — PE / Mach-O anomaly triage: the static complement to Lab 6, reading a file's own structure for the lie.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 8 · NOP sled · detect the runway by its length and its inertness, never the one byte · <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  var NOPEQ=new Set([0x90,0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4a,0x4b,0x4c,0x4d,0x4e,0x4f,
+    0x91,0x92,0x93,0x94,0x95,0x96,0x97,0x27,0x2f,0x37,0x3f,0xf5,0xf8,0xf9,0xfc,0xfd]);
+  var TH=16, mode="classic";
+  var HEAD=[0x4d,0x5a,0x00,0x11,0x22,0x8b,0x1c,0x24];
+  var TAIL=[0xeb,0x10,0x5e,0x31,0xc9,0xfc,0x48,0x8b];
+  function build(m){
+    var sled=[],i,noise=[0x40,0x47,0x91,0x4f,0x37,0x27,0x93,0x48,0x90,0x4a,0x96,0x41,0x45,0x92];
+    for(i=0;i<40;i++) sled.push(m==="classic"?0x90:noise[i%noise.length]);
+    return {bytes:HEAD.concat(sled,TAIL), sledStart:HEAD.length, sledEnd:HEAD.length+40};
+  }
+  function longestRun(buf,pred){var best=0,bs=0,cur=0,cs=0;for(var i=0;i<buf.length;i++){if(pred(buf[i])){if(cur===0)cs=i;cur++;if(cur>best){best=cur;bs=cs;}}else cur=0;}return{len:best,start:bs};}
+  function hx(n){return (n&0xff).toString(16).toUpperCase().padStart(2,"0");}
+  function off(n){return n.toString(16).padStart(4,"0");}
+
+  var cur=build("classic"), scan=null;
+  function render(){
+    var bytes=cur.bytes, html="";
+    for(var i=0;i<bytes.length;i++){
+      if(i%16===0){ if(i) html+="\n"; html+='<span class="off">0x'+off(i)+'</span>  '; }
+      var cls="";
+      if(scan){
+        var inSmart = i>=scan.smart.start && i<scan.smart.start+scan.smart.len && scan.smart.len>=TH;
+        if(inSmart) cls = (bytes[i]===0x90) ? "sled nop0" : "sled";
+      } else {
+        if(i>=cur.sledStart && i<cur.sledEnd) cls="head";
+        else if(i>=cur.sledEnd) cls="pay";
+      }
+      html+='<b class="'+cls+'">'+hx(bytes[i])+'</b> ';
+    }
+    document.getElementById("hex").innerHTML=html;
+  }
+  function setBuf(m){ mode=m; cur=build(m); scan=null;
+    document.getElementById("bC").setAttribute("aria-pressed",m==="classic");
+    document.getElementById("bE").setAttribute("aria-pressed",m==="evasive");
+    document.getElementById("dets").innerHTML=""; render(); }
+  window.setBuf=setBuf;
+  window.resetScan=function(){ scan=null; document.getElementById("dets").innerHTML=""; render(); };
+
+  window.runScan=function(){
+    var naive=longestRun(cur.bytes,function(b){return b===0x90;});
+    var smart=longestRun(cur.bytes,function(b){return NOPEQ.has(b);});
+    scan={naive:naive,smart:smart}; render();
+    var nf=naive.len>=TH, sf=smart.len>=TH;
+    var html="";
+    html+='<div class="det '+(nf?"flag":"miss")+'"><h4>naive · 0x90 run-length</h4>'+
+      '<div class="v">'+(nf?("FLAG — "+naive.len+"-byte 0x90 run"):("missed — longest 0x90 run "+naive.len))+'</div>'+
+      '<div class="x">'+(nf?"@ offset 0x"+off(naive.start):"below threshold ("+TH+"); a non-0x90 sled is invisible to this rule")+'</div></div>';
+    html+='<div class="det '+(sf?"flag":"miss")+'"><h4>shape-aware · NOP-equivalence run</h4>'+
+      '<div class="v">'+(sf?("FLAG — "+smart.len+"-byte inert run"):("clean — longest inert run "+smart.len))+'</div>'+
+      '<div class="x">'+(sf?("@ offset 0x"+off(smart.start)+" · "+(mode==="classic"?"solid 0x90":"register-noise, caught by the class not the byte")):"no runway")+'</div></div>';
+    document.getElementById("dets").innerHTML=html;
+  };
+
+  setBuf("classic");
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

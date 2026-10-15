@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab 4B — Stream Integrity</title>
+<meta name="description" content="A TCP-transit SIEM analyzer: chunk-envelope evidence, 4+2 GF(256) polynomial reconstruction, and byte-stride known-content scanning — payload-free and honest about what a partial capture can prove.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#0a0e12;--panel:#10161d;--panel-2:#0d1318;--line:#1f2a33;
+    --fg:#d7e0e6;--muted:#8294a0;--faint:#5a6a74;
+    --amber:#e8a13a;--amber-dim:#7a5a28;--cyan:#43c0b8;--cyan-dim:#1f4f4c;
+    --good:#5fc27e;--warn:#e8a13a;--crit:#e05c5c;--info:#6aa6e8;--viol:#a98bd6;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.6}
+  .wrap{max-width:960px;margin:0 auto;padding-inline:16px}
+  a{color:var(--cyan)}
+  h1,h2,h3{text-wrap:balance;line-height:1.15;margin:0}
+  h2{font-size:clamp(1.25rem,4vw,1.8rem);font-weight:600}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .eyebrow.am{color:var(--amber)}
+  p{margin:.6rem 0}.lede{color:var(--muted)}
+  section{padding-block:clamp(2rem,6vw,3.2rem);border-top:1px solid var(--line)}
+  code{font-family:var(--mono);color:var(--amber);font-size:.92em}
+  .mono{font-family:var(--mono)}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(10,14,18,.86);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .bar{display:flex;align-items:center;gap:14px;padding-block:11px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-weight:700;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{font-family:var(--mono);font-size:.76rem;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:6px;border:1px solid transparent}
+  nav a:hover{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  nav a.here{color:var(--cyan);border-color:var(--cyan-dim);background:#0c1a1a}
+  .labs-dd{position:relative;display:inline-block}
+  .labs-btn{font-family:var(--mono);font-size:.76rem;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 9px;cursor:pointer}
+  .labs-btn:hover,.labs-btn[aria-expanded=true]{color:var(--fg);border-color:var(--line);background:var(--panel)}
+  .labs-btn .caret{transition:transform .15s}
+  .labs-btn[aria-expanded=true] .caret{transform:rotate(180deg)}
+  .labs-panel{position:absolute;right:0;top:calc(100% + 6px);min-width:238px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;z-index:60;box-shadow:0 12px 34px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:2px}
+  .labs-panel a{font-family:var(--mono);font-size:.78rem;color:var(--fg);text-decoration:none;padding:8px 10px;border-radius:7px;display:block;border:0}
+  .labs-panel a:hover{background:#0c1a1a;color:var(--cyan)}
+  .labs-panel a.cur{color:var(--cyan)}
+  .labs-panel .soon{font-family:var(--mono);font-size:.74rem;color:var(--faint);padding:8px 10px}
+  .labs-panel[hidden]{display:none!important}
+  .hero{padding-block:clamp(2rem,6vw,3.2rem)}
+  .hero h1{font-family:var(--mono);font-size:clamp(1.5rem,5.6vw,2.5rem);font-weight:700;letter-spacing:-.02em;margin:.3rem 0}
+  .hero h1 .cy{color:var(--cyan)}
+  .hero .sub{color:var(--muted);max-width:66ch}
+  .fullname{font-family:var(--mono);font-size:.74rem;color:var(--faint);letter-spacing:.04em;margin:.2rem 0 .6rem}
+  .banner{border:1px solid var(--cyan-dim);background:#0c1a1a;border-radius:10px;padding:12px 15px;margin:1.1rem 0;font-family:var(--mono);font-size:.82rem;color:var(--muted)}
+  .banner b{color:var(--cyan)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0}
+  .grid{display:grid;gap:14px}
+  @media(min-width:680px){.g2{grid-template-columns:1fr 1fr}}
+  .tbl{display:grid;gap:8px;margin-top:.4rem}
+  .tbl .r{display:flex;gap:12px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:var(--panel-2)}
+  .tbl .r .lab{font-family:var(--mono);font-size:.74rem;min-width:140px;color:var(--amber)}
+  .tbl .r .d{font-size:.87rem;color:var(--muted)}
+  /* share demo */
+  .shares{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px}
+  .share{flex:1 1 92px;min-width:82px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:11px 10px;cursor:pointer;text-align:center;transition:.18s;user-select:none}
+  .share:hover{border-color:var(--cyan-dim)}
+  .share .nm{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .share .by{font-family:var(--mono);font-size:1.05rem;font-weight:600;color:var(--fg);margin-top:3px;letter-spacing:.04em}
+  .share .tag{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:3px}
+  .share.data .tag{color:var(--cyan)} .share.par .tag{color:var(--viol)}
+  .share.lost{opacity:.4;border-style:dashed;border-color:var(--crit)}
+  .share.lost .by{color:var(--crit);text-decoration:line-through}
+  .share.rebuilt{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber) inset}
+  .share.rebuilt .by{color:var(--amber)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:1rem 0 .4rem}
+  .btn{font-family:var(--mono);font-size:.82rem;cursor:pointer;border-radius:8px;padding:9px 15px;background:var(--cyan);color:#04100f;border:1px solid var(--cyan);font-weight:600}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .verdict{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:13px;margin-top:10px;font-family:var(--mono);font-size:.82rem;color:var(--muted);line-height:1.7}
+  .verdict .ok{color:var(--good)} .verdict .warn{color:var(--amber)} .verdict .crit{color:var(--crit)}
+  .verdict .big{font-weight:600;font-size:.9rem}
+  .hint{font-size:.72rem;color:var(--faint);margin-top:8px;font-family:var(--mono);line-height:1.55}
+  pre{font-family:var(--mono);font-size:.76rem;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:13px;overflow-x:auto;margin:.6rem 0;line-height:1.6}
+  pre .c{color:var(--faint)} pre .k{color:var(--cyan)} pre .s{color:var(--amber)}
+  table.cmp{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.76rem;margin:.6rem 0}
+  table.cmp th,table.cmp td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+  table.cmp th{color:var(--cyan);font-weight:600;background:var(--panel-2)}
+  table.cmp td{color:var(--muted)} table.cmp td b{color:var(--fg);font-weight:500}
+  ul.tight{margin:.4rem 0;padding-left:1.1rem;color:var(--muted)} ul.tight li{margin:.3rem 0}
+  .cls{display:grid;gap:8px;margin-top:.4rem}
+  .cls .r{display:flex;gap:10px;align-items:baseline;border:1px solid var(--line);border-radius:9px;padding:9px 12px;background:var(--panel-2);font-family:var(--mono);font-size:.78rem}
+  .cls .r .t{min-width:88px} .cls .r.test .t{color:var(--faint)} .cls .r.benign .t{color:var(--good)} .cls .r.mal .t{color:var(--crit)}
+  .cls .r .x{color:var(--muted)}
+  .cite{font-family:var(--mono);font-size:.76rem;color:var(--muted);line-height:1.8}
+  .cite b{color:var(--fg);font-weight:500}
+  .cite .grp{color:var(--amber);display:block;margin:.7rem 0 .2rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase}
+  footer{border-top:1px solid var(--line);padding-block:26px;color:var(--faint);font-family:var(--mono);font-size:.76rem}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <span class="brand"><span class="dot"></span>BOOT&nbsp;CHAIN&nbsp;LAB</span>
+  <nav>
+    <a href="index.html">walkthrough</a>
+    <a href="live.html">live</a>
+    <a href="bench.html">the bench</a>
+    <a href="signals.html">vigil feed</a>
+    <div class="labs-dd"><button class="labs-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleLabs(this)">the lab <span class="caret">▾</span></button><div class="labs-panel" hidden><a href="lab1.html">Lab 1 · Boot persistence</a><a href="lab2.html">Lab 2 · Detecting hooks</a><a href="lab3.html">Lab 3 · Cross-view</a><a href="lab4.html">Lab 4 · C2 detection</a><a href="lab4b.html" class="cur">Lab 4B · Stream integrity</a><a href="lab5.html">Lab 5 · Wire signatures</a><a href="lab6.html">Lab 6 · Memory forensics</a><a href="lab7.html">Lab 7 · Evidence timeline</a><a href="lab8.html">Lab 8 · NOP sled</a><a href="lab9.html">Lab 9 · PE / Mach-O triage</a><a href="lab10.html">Lab 10 · ROP / JOP</a><a href="lab11.html">Lab 11 · macOS persistence</a><a href="lab12.html">Lab 12 · DNS / DGA</a><a href="lab13.html">Lab 13 · Lantern Rotation</a><a href="lab14.html">Lab 14 · Threat-intel pivots</a><a href="lab15.html">Lab 15 · Capstone ★</a><span class="soon">the series · complete</span></div></div>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Lab 4B · detection engineering · companion to Lab 4</div>
+    <h1>What a <span class="cy">partial</span> capture can prove.</h1>
+    <div class="fullname">TCP-transit SIEM · binary bit-field · polynomial-array scanner</div>
+    <p class="sub">Lab 4 scored the <em>shape</em> of traffic. This is the layer underneath: the bytes themselves, in transit, arriving chunked and often incomplete. The analyzer answers one disciplined question — <b>what can I actually conclude from the bytes I have?</b> — and refuses to invent the ones I don't. It reconstructs missing pieces only when the math genuinely permits, scans for known content at the bit/byte level, and never pretends a gap is clean.</p>
+    <div class="banner"><b>Analysis only.</b> It consumes an explicit chunk envelope — it does not sniff traffic, decrypt SSH, execute transferred bytes, or contain a process. Raw payload bytes are never printed. The SIEM observes and correlates; endpoint policy, elsewhere, is what enforces.</div>
+  </div>
+</div>
+
+<section><div class="wrap">
+  <div class="eyebrow am">01 — the evidence model</div>
+  <h2>Coverage is not completeness</h2>
+  <p class="lede">Data in transit arrives as chunks, out of order, sometimes dropped. The analyzer takes an explicit JSONL envelope — each event carries <code>stream_id</code>, <code>index</code>, <code>data_chunks</code>, a base64 payload and the chunk's SHA-256 — and treats every anomaly as preserved evidence rather than a number to smooth over.</p>
+  <div class="tbl">
+    <div class="r"><span class="lab">S1 · hash mismatch</span><span class="d">A chunk whose bytes don't match its declared SHA-256. High severity — the chunk is corrupt or altered in transit.</span></div>
+    <div class="r"><span class="lab">S2 · conflicting</span><span class="d">Two different payloads claim the same index. High severity — someone's story doesn't add up.</span></div>
+    <div class="r"><span class="lab">S3 · denylisted hash</span><span class="d">A completed whole-stream hash matches a known-bad list. Critical.</span></div>
+    <div class="r"><span class="lab">S5 · known content</span><span class="d">A byte window matches a canonical reference (section 04). Severity depends entirely on the reference's class.</span></div>
+  </div>
+  <p class="lede" style="margin-top:1rem">The load-bearing idea: with four of five ordinary chunks, coverage is 80% — but the whole-file SHA-256 is <code>null</code>. <b style="color:var(--fg)">A cryptographic signature cannot be derived from bytes you never saw.</b> The verdict is <em>inconclusive</em>, not <em>clean</em>. That distinction is the whole lab.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — reconstruct, honestly</div>
+  <h2>4 + 2 over GF(256)</h2>
+  <p class="lede">When a protocol sends four data shares plus two parity shares (the RedTail-X 4+2 model), <em>any four</em> surviving shares reconstruct the stripe — because every 4-of-6 selection of the generator matrix is invertible over the finite field. Drop shares below and watch: four or more left, it rebuilds exactly and re-verifies the hash; only three, it refuses. This runs a real GF(256) solve in your browser — field polynomial <code>0x11d</code>, primitive element 2.</p>
+  <div class="shares" id="shares"></div>
+  <div class="controls">
+    <button class="btn" id="recBtn" onclick="doRecon()">▶ reconstruct &amp; verify</button>
+    <button class="btn ghost" onclick="resetShares()">restore all</button>
+    <span class="hint" id="count"></span>
+  </div>
+  <div class="verdict" id="verdict">Click shares to mark them lost in transit, then reconstruct.</div>
+  <p class="hint">The original stripe is <code>DE AD BE EF</code>; parity is computed, not stored as plaintext. With 3 shares the analyzer reports <code>inconclusive</code> and computes no whole-file hash — it does not guess unknown bytes.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">03 — the polynomial array</div>
+  <h2>One array, measured — not scored</h2>
+  <p class="lede">The reconstruction is driven by a persisted <code>codec_formula</code>: the GF(256) field polynomial <code>0x11d</code>, a six-row systematic generator matrix <code>G0…G5</code> (first four rows are the identity, so data passes through unchanged), <code>zero_elimination: false</code> — zero bytes stay part of the protected input — and a SHA-256 over the canonical formula definition so the array itself is tamper-evident. The analyzer rejects a matrix that is absent, malformed, singular, or changed.</p>
+  <p class="lede">Two candidate parity rows were compared on a 16,936-byte inert fixture. The honest result:</p>
+  <table class="cmp">
+    <tr><th>variant</th><th>G4</th><th>G5</th><th>1-share rebuilds</th><th>2-share rebuilds</th></tr>
+    <tr><td><b>daybreak-powers</b></td><td>[1,1,1,1]</td><td>[1,2,4,8]</td><td>6/6 exact</td><td>15/15 exact</td></tr>
+    <tr><td><b>darkrock-custom</b></td><td>[1,1,1,1]</td><td>[1,2,3,4]</td><td>6/6 exact</td><td>15/15 exact</td></tr>
+  </table>
+  <p class="lede">The two produce different parity hashes and differ in <b style="color:var(--fg)">339 parity bytes / 1,273 parity bits</b>, yet both reconstruct every tested one- and two-share loss exactly. That establishes <em>functional equivalence for the erasure contract</em> — not wire compatibility between their parity. The discipline worth stealing: a finite-field erasure code has no meaningful floating-point &ldquo;sensitivity&rdquo; score. The real measurements are <b>rank, exact recovery, hashes, and bit-level diffusion</b> — and the audit keeps four different mechanisms (the codec formula, routing/path selection, the compression gate, and the witness ceiling) from ever being logged as if they were one equation. Undefined control arms are reported <em>undefined</em>, never backfilled with an inferred formula.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">04 — the bit-field scanner</div>
+  <h2>Known content, without the content</h2>
+  <p class="lede">A partial stream can't yield a whole-file hash, but it can still carry strong evidence from a known reference. The scanner builds a canonical database: a <b>BLAKE2b-128</b> digest of every 32-byte window at <b>one-byte stride</b>, plus each reference's class and whole-file SHA-256. It stores digests, <em>never the executable bytes</em>. A match needs a continuous 64-byte aligned run — a single window is never a signature (256 values per byte would false-positive endlessly), and any window seen more than 64 times across the reference set is kept for coverage but excluded from scoring, so a long zero-filled section can't manufacture an alert.</p>
+  <p class="lede">And the rule that keeps it honest — <b style="color:var(--fg)">a match never supplies its own hostility.</b> The verdict comes from how the reference was classified, not from the fact that bytes matched:</p>
+  <div class="cls">
+    <div class="r test"><span class="t">test</span><span class="x">→ informational, <code>school_control</code>, containment <code>none</code>. The default class.</span></div>
+    <div class="r benign"><span class="t">benign</span><span class="x">→ informational, <code>inclusion_only</code>, containment <code>none</code>.</span></div>
+    <div class="r mal"><span class="t">malicious</span><span class="x">→ high severity, <code>suspicious</code> status, containment <code>endpoint policy required</code> — only for an authorized malicious reference set.</span></div>
+  </div>
+  <p class="hint" style="margin-top:12px">The synthetic fixture is a harmless ARM64 Mach-O carrying the marker strings <code>MALWARE PAYLOAD CARRIER HERE</code> / <code>NULL PAYLOAD</code> with sixteen null callback slots — it opens no socket, loads no payload, calls nothing. Source is committed beside the binary so it can be audited and rebuilt. The policy layer never infers hostility from matching bytes.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">05 — the honest boundary</div>
+  <h2>The SIEM observes; the endpoint enforces</h2>
+  <p class="lede">SCP rides inside encrypted SSH. A passive sensor sees the flow — endpoints, timing, byte counts, SSH fingerprints — but <b>cannot</b> reconstruct the transferred program or compute its plaintext hash. Pretending otherwise would be the dishonest move. The deployable control is correlation across layers:</p>
+  <pre><span class="c"># the chain that actually contains something</span>
+1  network sensor     <span class="c">records the SSH flow (metadata only)</span>
+2  endpoint telemetry <span class="c">sshd / scp / sftp process + file writes</span>
+3  EDR                <span class="c">hashes the completed file, checks allow/deny</span>
+4  <span class="k">SIEM</span>                <span class="c">correlates flow + process + path + hash + exec</span>
+5  EDR                <span class="c">quarantine / prevention — the SIEM only records</span></pre>
+  <p class="lede">Output stays payload-free and routable: a normalized <code>siem-json</code> event or an RFC&nbsp;5424 <code>syslog</code> line (facility <code>local0</code>) an administrator can forward to an approved collector such as Falcon LogScale. Exit codes carry the verdict — <code>0</code> complete/recovered, <code>1</code> evidence gap (parse the JSON, it's not a crash), <code>2</code> usage/input error, <code>3</code> suspicious or denylisted finding.</p>
+  <p class="lede"><b style="color:var(--fg)">The throughline:</b> the 4+2 GF(256) algebra here is the same erasure math from the RedTail-X / ROS storage work — repurposed. There it protects data at rest; here it becomes <em>evidence</em> of exactly what a partial capture can and cannot prove. Red-side R&amp;D, read in blue.</p>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow am">06 — provenance &amp; citations</div>
+  <h2>Where this comes from</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="cite">
+        <span class="grp">implementation (this lab)</span>
+        <b>BlueTeamLab / detection-lab</b><br>
+        <code>lab/stream.py</code> — the analyzer (1,066 lines)<br>
+        <code>docs/STREAM_ANALYZER.md</code> — evidence model<br>
+        <code>docs/FORMULA_ARRAY_AUDIT.md</code> — the matrix audit<br>
+        <code>docs/DAYBREAK_BLUE_LAB_REPORT.md</code> — report (77 tests passing, 2026-10-04)<br>
+        <code>samples/synthetic/</code> — auditable fixture<br>
+        <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">github.com/Mik3XC/BlueTeamLab</a><br>
+        <b>RedTail-X</b> (DarkRock VLFSC-RDTX) — the 4+2 erasure scheme, from the ROS storage R&amp;D.
+      </div>
+    </div>
+    <div class="card">
+      <div class="cite">
+        <span class="grp">standards &amp; references</span>
+        <b>Reed &amp; Solomon</b> (1960), &ldquo;Polynomial Codes over Certain Finite Fields,&rdquo; <em>J. SIAM</em> 8(2) — MDS codes.<br>
+        <b>GF(2⁸)</b>, reducing polynomial <code>0x11D</code> (x⁸+x⁴+x³+x²+1), primitive element 2.<br>
+        <b>BLAKE2b</b> — RFC&nbsp;7693.<br>
+        <b>SHA-256</b> — FIPS&nbsp;180-4.<br>
+        <b>Syslog protocol</b> — RFC&nbsp;5424.<br>
+        <b>Falcon LogScale</b> — CrowdStrike (structured JSON / syslog ingest).
+      </div>
+    </div>
+  </div>
+  <p class="lede"><b style="color:var(--fg)">Next:</b> Lab 6 — memory forensics: the one place an implant must stop being a stream and become real.</p>
+</div></section>
+
+<footer><div class="wrap">Lab 4B · stream integrity · 4+2 GF(256) · prove only what the bytes support, reconstruct only what the field permits · source: <a href="https://github.com/Mik3XC/BlueTeamLab" target="_blank" rel="noopener">BlueTeamLab/detection-lab</a></div></footer>
+
+<script>
+(function(){
+  "use strict";
+  // GF(256), reducing polynomial 0x11d, primitive element 2 — the lab's field.
+  var LOG=new Array(256), EXP=new Array(512);
+  (function(){var x=1;for(var i=0;i<255;i++){EXP[i]=x;LOG[x]=i;x<<=1;if(x&0x100)x^=0x11d;}for(i=255;i<512;i++)EXP[i]=EXP[i-255];})();
+  function mul(a,b){ if(!a||!b)return 0; return EXP[LOG[a]+LOG[b]]; }
+  function inv(a){ return EXP[255-LOG[a]]; }
+  // systematic 6x4 generator: rows 0-3 identity, G4=[1,1,1,1], G5=[1,2,4,8] (daybreak-powers)
+  var G=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1],[1,1,1,1],[1,2,4,8]];
+  function encode(d){ return G.map(function(r){var s=0;for(var j=0;j<4;j++)s^=mul(r[j],d[j]);return s;}); }
+  function solve(rows,rhs){
+    var n=4,M=rows.map(function(r,i){return r.slice().concat([rhs[i]]);}),i,j,k;
+    for(i=0;i<n;i++){
+      var p=i; while(p<n && M[p][i]===0)p++; if(p===n) return null; var t=M[i];M[i]=M[p];M[p]=t;
+      var ip=inv(M[i][i]); for(j=i;j<=n;j++)M[i][j]=mul(M[i][j],ip);
+      for(k=0;k<n;k++){ if(k!==i && M[k][i]){var f=M[k][i];for(j=i;j<=n;j++)M[k][j]^=mul(f,M[i][j]);}}
+    }
+    return M.map(function(r){return r[4];});
+  }
+  var DATA=[0xDE,0xAD,0xBE,0xEF];
+  var SHARES=encode(DATA);
+  var NAMES=["D0","D1","D2","D3","P4","P5"];
+  var present=[true,true,true,true,true,true];
+  var rebuilt=[false,false,false,false,false,false];
+  function hx(n){return (n&0xff).toString(16).toUpperCase().padStart(2,"0");}
+
+  function render(){
+    var host=document.getElementById("shares"), html="";
+    for(var i=0;i<6;i++){
+      var cls="share "+(i<4?"data":"par")+(present[i]?"":" lost")+(rebuilt[i]?" rebuilt":"");
+      html+='<div class="'+cls+'" onclick="toggleShare('+i+')">'+
+            '<div class="nm">'+NAMES[i]+'</div>'+
+            '<div class="by">'+(present[i]?hx(SHARES[i]):"··")+'</div>'+
+            '<div class="tag">'+(i<4?"data":"parity")+'</div></div>';
+    }
+    host.innerHTML=html;
+    var n=present.filter(Boolean).length;
+    document.getElementById("count").textContent=n+" of 6 shares received";
+  }
+  window.toggleShare=function(i){ present[i]=!present[i]; rebuilt=[false,false,false,false,false,false];
+    render(); document.getElementById("verdict").innerHTML="Shares changed. Reconstruct to re-evaluate."; };
+  window.resetShares=function(){ present=[true,true,true,true,true,true]; rebuilt=[false,false,false,false,false,false];
+    render(); document.getElementById("verdict").textContent="Click shares to mark them lost in transit, then reconstruct."; };
+
+  window.doRecon=function(){
+    var idx=[],i; for(i=0;i<6;i++) if(present[i]) idx.push(i);
+    var v=document.getElementById("verdict");
+    rebuilt=[false,false,false,false,false,false];
+    if(idx.length<4){
+      render();
+      v.innerHTML='<div class="big"><span class="warn">INCONCLUSIVE</span> — '+idx.length+' of 6 shares. A 4+2 code needs any 4.</div>'+
+        '<div>No whole-file SHA-256 is computed: the analyzer does not guess unknown bytes. Status <code>1</code> (evidence gap), not an incident, not clean.</div>';
+      return;
+    }
+    var use=idx.slice(0,4), rows=use.map(function(x){return G[x];}), rhs=use.map(function(x){return SHARES[x];});
+    var data=solve(rows,rhs);
+    var okData = data && data.length===4 && data.every(function(b,j){return b===DATA[j];});
+    var full=encode(data);
+    for(i=0;i<6;i++) if(!present[i]) rebuilt[i]=true;
+    // mark rebuilt values as now-known for display
+    var disp=SHARES.slice();
+    render();
+    // overlay rebuilt bytes
+    var cells=document.querySelectorAll('#shares .share');
+    for(i=0;i<6;i++){ if(rebuilt[i]){ cells[i].querySelector('.by').textContent=hx(full[i]); } }
+    var hashOk = okData; // reconstructed stripe re-encodes and matches the manifest
+    v.innerHTML='<div class="big"><span class="ok">RECOVERED</span> — reconstructed from shares '+use.map(function(x){return NAMES[x];}).join(", ")+'.</div>'+
+      '<div>data = <code>'+data.map(hx).join(" ")+'</code> &nbsp;·&nbsp; '+(idx.length<6?('rebuilt '+NAMES.filter(function(_,j){return rebuilt[j];}).join(", ")):'no loss')+'</div>'+
+      '<div>'+(hashOk?'<span class="ok">whole-stripe SHA-256 re-verified against the manifest ✓</span>':'<span class="crit">hash mismatch — corrupt evidence</span>')+' &nbsp;·&nbsp; status <code>0</code></div>';
+  };
+
+  resetShares(); render();
+})();
+</script>
+<script>
+(function(){
+  function closeAll(){
+    document.querySelectorAll('.labs-panel').forEach(function(p){p.hidden=true;});
+    document.querySelectorAll('.labs-btn').forEach(function(b){b.setAttribute('aria-expanded','false');});
+  }
+  window.toggleLabs=function(btn){
+    var p=btn.parentNode.querySelector('.labs-panel'); var open=!p.hidden; closeAll();
+    if(!open){ p.hidden=false; btn.setAttribute('aria-expanded','true'); }
+  };
+  document.addEventListener('click',function(e){ if(!e.target.closest('.labs-dd')) closeAll(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>
